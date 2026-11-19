@@ -37,7 +37,10 @@ mlflow:
   champion_alias: champion
 
 api:
-  model_dir: artifacts/model
+  model_dir: artifacts/model            # frozen phase-3 champion (test evaluation)
+  serving_model_dir: artifacts/model_calibrated   # calibrated model served to users
   title: Churn Prediction API
   version: 0.1.0
   max_batch_size: 1000
+  cors_origins:
+    - "*"

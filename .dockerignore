@@ -1,0 +1,26 @@
+# Keep the build context small: the image needs code + the one artifact, nothing else.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.git/
+.gitignore
+.github/
+
+# Training/data are intentionally absent from the serving image.
+data/
+mlruns/
+mlartifacts/
+mlflow.db
+dvc.lock
+tests/
+docs/
+reports/
+notebooks/
+
+# Model artifacts: only the calibrated one ships.
+artifacts/*
+!artifacts/model_calibrated/

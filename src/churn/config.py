@@ -97,10 +97,20 @@ class MLflowConfig(BaseModel):
 class APIConfig(BaseModel):
     """Inference service configuration."""
 
+    #: The frozen Phase 3 champion. Used by the one-shot test evaluation, which
+    #: must load exactly the artifact that was frozen — not the served model.
     model_dir: Path = Path("artifacts/model")
+    #: What the serving API and dashboard load. This is the *calibrated* model
+    #: from the calibration step; keeping it separate from ``model_dir`` prevents
+    #: the test-evaluation path from silently picking up a different artifact.
+    serving_model_dir: Path = Path("artifacts/model_calibrated")
     title: str = "Churn Prediction API"
     version: str = "0.1.0"
     max_batch_size: int = 1000
+    #: Allowed browser origins for the Streamlit frontend, which runs on a
+    #: different host. ``*`` is the default because this API holds no user data
+    #: and has no authentication; narrow it via ``CHURN_API__CORS_ORIGINS``.
+    cors_origins: list[str] = ["*"]
 
 
 class DatabaseSettings(BaseModel):

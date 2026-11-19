@@ -25,10 +25,18 @@ data/processed/*
 !data/processed/.gitkeep
 
 # ---------------- Model artifacts ----------------
-artifacts/
+# Everything is ignored by default, with one deliberate exception: the served
+# artifact is COMMITTED. The deployment target has no persistent disk and no
+# object store (free tier), so the calibrated model must ship inside the
+# repository and be baked into the image at build time.
+artifacts/*
+!artifacts/model_calibrated/
+!artifacts/model_calibrated/pipeline.joblib
+!artifacts/model_calibrated/metadata.json
 models/
 *.pkl
 *.joblib
+!artifacts/model_calibrated/pipeline.joblib
 
 # ---------------- MLflow ----------------
 mlruns/
@@ -43,7 +51,10 @@ mlflow.db
 *.key
 
 # ---------------- Reports (generated) ----------------
+# Figures are committed: the README links to them, and a broken image in the
+# project's front page is worse than 200 KB of PNGs.
 reports/figures/*.png
+!reports/figures/*.png
 reports/*.html
 reports/drift/
 !reports/.gitkeep

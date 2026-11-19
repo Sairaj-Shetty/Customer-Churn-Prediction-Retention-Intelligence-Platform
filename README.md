@@ -1,9 +1,11 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–3 complete.** Data pipeline, preprocessing, multi-model
-training with Optuna/RandomizedSearch tuning, MLflow tracking + registry, and
-> leakage-proof model selection are implemented and tested (216 tests). Modelling, API, dashboard and
-> deployment follow in later phases — see the [roadmap](#roadmap).
+> **Status: Phases 0–4 complete.** Data pipeline, preprocessing, multi-model
+> training with Optuna/RandomizedSearch tuning, MLflow tracking + registry,
+> leakage-proof model selection, probability calibration and SHAP explainability
+> are implemented and tested (**297 tests**). A runnable explainability API and a
+> Streamlit dashboard exist; the remaining serving, persistence, drift and
+> deployment work follows in later phases — see the [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
 ingest → validate → engineer features → train and compare multiple models →
@@ -408,6 +410,221 @@ on this dataset (costs differ ~2%), and it **consistently worsens calibration**
 independently converged near **1.0**, rediscovering the unweighted baseline
 rather than the textbook `neg/pos ≈ 2.77`.
 
+## Calibration and explainability (Phase 4)
+
+Full write-up: [`docs/04_PHASE4_CALIBRATION_SHAP.md`](docs/04_PHASE4_CALIBRATION_SHAP.md).
+
+### Why calibration was required
+
+Class weighting deliberately distorts the probability scale. The pre-registered
+Phase 3 rule ("calibrate if Brier > 0.15 **or** |mean predicted − actual rate| >
+0.05") fired on both conditions: the champion's mean predicted probability was
+**0.4071** against a true churn rate of **0.2654** — risk overstated by ~60%.
+
+### Results (validation split, 1,409 rows — test split untouched)
+
+| Method | Brier ↓ | LogLoss ↓ | Prob. gap ↓ | PR-AUC | Threshold | Business cost ↓ |
+|---|---:|---:|---:|---:|---:|---:|
+| None (Phase 3) | 0.1546 | 0.4666 | **+0.1416** | 0.6740 | 0.44 | **40,900** |
+| **Sigmoid (selected)** | **0.1303** | **0.4032** | **+0.0027** | 0.6723 | **0.21** | 41,200 |
+| Isotonic | 0.1313 | 0.4039 | +0.0013 | 0.6687 | 0.24 | 41,700 |
+
+Calibration was fitted with `CalibratedClassifierCV(cv=5)` **inside the training
+split**, and the method was chosen on validation — never on test. Isotonic
+appropriateness was checked before fitting (224 positive events per fold).
+
+### Honest verdict: what improved and what did not
+
+**Improved:** Brier score **0.1546 → 0.1303** (−15.7%), probability gap
+**+0.1416 → +0.0027** (−98%), log loss −13.6%. A 30% score now genuinely
+corresponds to about a 30% churn rate, which is what makes risk tiers usable.
+
+**Not improved:** discrimination is **flat by construction** — PR-AUC 0.6740 →
+0.6723, ROC-AUC 0.8597 → 0.8591. A monotone transform cannot reorder customers,
+so reporting a ranking gain here would indicate a leak. Business cost **rose by
+300** (40,900 → 41,200) at the re-optimised threshold.
+
+**Conclusion:** calibration bought trustworthy probabilities, not better
+detection. The accuracy-trap finding from Phase 3 is unaffected.
+
+![Calibration curves](reports/figures/calibration_curves.png)
+
+### SHAP with one-hot grouping
+
+The model consumes **46 one-hot columns from 19 parent features**. Reporting
+`Contract_Month-to-month`, `Contract_One year` and `Contract_Two year` as three
+features is wrong: for one customer those may carry `+0.09`, `−0.00`, `−0.04`,
+and only their **sum** (+0.05) is what that customer experienced from contract
+type. Contributions are therefore **aggregated**, not renamed.
+
+The mapping is derived from the fitted `ColumnTransformer`'s own `categories_`
+rather than string splitting (levels like `No internet service` break naive
+parsing), and it asserts full coverage of all 46 columns — a one-column
+misalignment would otherwise misattribute every value silently.
+
+| Rank | Parent feature | Mean \|SHAP\| |
+|---:|---|---:|
+| 1 | **Contract** | 0.1032 |
+| 2 | InternetService | 0.0553 |
+| 3 | tenure | 0.0479 |
+| 4 | OnlineSecurity | 0.0468 |
+| 5 | TechSupport | 0.0411 |
+
+`Contract` ranking first corroborates the EDA (42.7% month-to-month churn vs
+2.8% for two-year) — and grouping is what surfaces it; split across three dummies
+no single column would rank first.
+
+![Global importance](reports/figures/shap_global_importance.png)
+
+### Raw SHAP vs calibrated probability — kept strictly separate
+
+Calibration is a monotone non-linear map of the raw score, so SHAP values are
+**additive in the raw score only**:
+
+- `raw_score = baseline_raw_score + Σ contributions` — verified in tests to
+  1e-6 and in the report to **1.83e-15**.
+- `churn_probability ≠ raw_score`, and contributions **do not** sum to the
+  calibrated probability.
+
+Every API response returns both numbers, names the space, and carries an explicit
+warning. Directions still transfer (a monotone map preserves sign); magnitudes do
+not. All SHAP values are additive in **probability** space for
+`TreeExplainer` on these scikit-learn trees — verified against `predict_proba`, not
+assumed.
+
+![Waterfall](reports/figures/shap_waterfall_customer0.png)
+
+### Deterministic explanations (no LLM)
+
+A real generated explanation:
+
+> This customer has high predicted churn risk (64.6%). Model risk increases are
+> associated mainly with contract type of Month-to-month, internet service of
+> Fiber optic, and tech support add-on of No. Model risk reductions come mainly
+> from total charges to date of ₹1,330.00, multiple lines of No, and senior
+> citizen status.
+
+Produced by deterministic string formatting over measured SHAP values. The
+generator avoids causal verbs (`causes`, `will churn`, `because of`) and tests
+assert their absence. **SHAP describes model behaviour, not causation** — no
+causal or uplift claims are made anywhere.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /explain` | One customer: probability, raw score, grouped contributions, summary |
+| `POST /explain/batch` | Up to 100 customers in one vectorised SHAP call |
+| `GET /model/explainability` | Version, threshold, calibration state, output space, global importance |
+| `GET /health` | Liveness probe — no SHAP work, so cold starts stay cheap |
+
+Validation is strict: the encoder uses `handle_unknown="ignore"`, so an unknown
+category would silently become an all-zero row and still return a *confident*
+prediction. Valid levels are declared as schema literals, turning a typo into a
+**422** instead of a wrong score.
+
+---
+
+## Deployment on a ₹0 budget
+
+The deployment target is **strictly free**: no paid services, no credit card, no
+AWS resources, no automatic paid upgrades. The plan was verified against each
+provider's current documentation **before** anything was implemented, because
+several popular "free" tiers do not support this workload.
+
+### Verified free-tier limits (checked 2026-11)
+
+| Provider | What the free tier actually gives | Consequence for this project |
+|---|---|---|
+| **GitHub Actions** | *Unlimited* minutes on **public** repos; private repos get 2,000 Linux min/month | Keep the repo **public**. CI is then free without quota anxiety. |
+| **Render — Web Service** | 512 MB RAM, 0.1 CPU, **750 instance-hours/month**, spins down after **15 min** idle (~60 s cold start), **no persistent disk**, 5 GB bandwidth | Workable for the API **only** with 1 worker and no reliance on local files. Cold starts are unavoidable. |
+| **Render — Postgres** | **Expires 30 days after creation**, deleted 14 days later, no backups | ❌ **Rejected.** Cannot satisfy a persistence requirement. |
+| **Neon — Postgres** | 100 CU-hours/project/month, **1 GB** storage (some docs say 0.5 GB), 5 GB egress, **scale-to-zero after 5 min** (cannot be disabled), no card, no expiry | ✅ The viable choice for prediction records. Accept ~0.5 s cold query. |
+| **Streamlit Community Cloud** | Free, unlimited public apps, ~1–2.7 GB RAM (docs conflict), **sleeps after 12 h** idle, no custom domain, requires a **public** repo | ✅ Viable frontend. Cold start 10–30 s. |
+| **Hugging Face Spaces** | Free CPU Basic: 2 vCPU / 16 GB RAM, Streamlit first-class | Fallback frontend if Streamlit Cloud's RAM limit bites. |
+
+### Architecture this implies
+
+```
+GitHub (public repo)
+│   ├── artifacts/model_calibrated/   ← committed (1.4 MB, versioned)
+│   └── training code, configs, tests
+│
+├─► Render Free Web Service ── FastAPI (1 worker, model baked into image)
+│        │  measured peak RSS with SHAP loaded: 362.7 MB  (limit 512 MB)
+│        └─► Neon Free Postgres ── prediction records (1 GB)
+│
+└─► Streamlit Community Cloud ── dashboard (calls the API over HTTPS only)
+```
+
+### Verified memory budget
+
+The binding constraint is Render's 512 MB. Measured with the full serving stack:
+
+| Stage | RSS |
+|---|---:|
+| Python baseline | 8.3 MB |
+| + numpy / pandas / sklearn | 170.4 MB |
+| + FastAPI / uvicorn | 188.7 MB |
+| + SQLAlchemy | 199.7 MB |
+| + loaded calibrated model | 227.5 MB |
+| + SHAP explainer built | **362.7 MB** |
+
+That fits, but with only ~150 MB headroom — hence **one worker** and a **lazy
+`import shap`** (the API boots and answers `/health` without paying the 95 MB).
+Two workers would exceed the limit.
+
+### What is deliberately *not* deployed
+
+| Component | Why | Replacement |
+|---|---|---|
+| **AWS (S3/ECR/ECS)** | Explicitly out of budget | Render + Neon; artifacts committed to the repo instead of S3 |
+| **MLflow server** | Needs persistent storage + RAM | Local MLflow only; the registry is not part of the public deployment |
+| **DVC remote** | Needs an object store | Local DVC; data is reproducible from the pinned SHA-256 |
+| **Render Postgres** | Expires after 30 days | Neon |
+
+Training is intentionally **separate from inference**. The deployed service only
+loads a committed artifact and serves it; it never trains, tunes or reads DVC.
+Retraining writes a new artifact and redeploys.
+
+### Why the model artifact is committed to Git
+
+`artifacts/model_calibrated/` (**1.4 MB**) is version-controlled, which is unusual
+for an ML repo. It is deliberate here: the free tier offers **no persistent disk**
+and no object store (S3 was excluded by budget), so the only way the service can
+have the model is to carry it in the image. The build copies it in at image-build
+time, which also means a deploy either has a model or fails loudly — it can never
+silently start with no model. Everything else under `artifacts/` stays ignored.
+
+### Cold-start behaviour (designed for, not hidden)
+
+| Service | Sleeps after | Wake time | Handling |
+|---|---|---|---|
+| Render API | 15 min idle | ~60 s | Dashboard retries once with a 75 s timeout and shows a "waking the API" notice instead of an error |
+| Streamlit Cloud | 12 h idle | 10–30 s | Native platform behaviour |
+| Neon | 5 min idle | ~0.5 s | Transparent; `pool_pre_ping` guards stale connections |
+
+### Not yet publicly deployed — stated plainly
+
+The API and dashboard **run and are verified locally**, but this repository does
+not ship live public URLs. Creating them requires the maintainer's own
+GitHub / Render / Neon / Streamlit accounts; provisioning cannot be performed from
+a development sandbox, and fabricating placeholder URLs would break the project's
+rule against claiming unimplemented things.
+
+To deploy, the maintainer needs to:
+
+1. Create a **public** GitHub repo (unlimited Actions minutes).
+2. Create a **Neon** project → copy the pooled connection string. *(No credit card.)*
+3. Create a **Render** Web Service from `render.yaml` → set `CHURN_DATABASE__URL`
+   to the Neon string. *(Free instance type; no card.)*
+4. Create a **Streamlit Cloud** app pointing at `src/churn/dashboard/app.py` →
+   set `CHURN_API_URL` to the Render URL in app secrets.
+5. Add the Streamlit URL to `CHURN_API__CORS_ORIGINS` on Render.
+
+Steps 2–5 are configuration, not code. This is the honest limit of what can be
+verified without the maintainer's accounts.
+
 ---
 
 ## Roadmap
@@ -418,9 +635,8 @@ rather than the textbook `neg/pos ≈ 2.77`.
 | 1 | Data acquisition, EDA, DVC, data card | ✅ done |
 | 2 | Validation contract, splitting, preprocessing pipeline, artifact | ✅ done |
 | 3 | 4 models × weighting variants, Optuna/RandomizedSearch, threshold optimisation, MLflow tracking + registry, frozen selection | ✅ done |
-| 4 | SHAP explainability | next |
-| 7 | SHAP global/local explainability | planned |
-| 8 | FastAPI backend (6 endpoints) | planned |
+| 4 | Probability calibration (sigmoid vs isotonic), SHAP global + local explainability with one-hot grouping, explainability API, dashboard | ✅ done |
+| 8 | Full FastAPI backend (predict, batch, metrics, model info) | partial — explainability endpoints live |
 | 9 | PostgreSQL persistence | planned |
 | 10 | Evidently drift monitoring | planned |
 | 11 | Streamlit dashboard | planned |

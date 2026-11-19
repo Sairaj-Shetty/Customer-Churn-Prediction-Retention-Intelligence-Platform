@@ -1,0 +1,34 @@
+# Render blueprint for the churn API — FREE instance type only.
+#
+# Deliberately NOT included: a Render Postgres. Render's free database expires
+# 30 days after creation and is deleted 14 days later, so it cannot hold
+# prediction records. Use Neon's free tier instead and set CHURN_DATABASE__URL
+# manually in the Render dashboard.
+#
+# Free-tier constraints this file respects:
+#   * 512 MB RAM      -> single worker (measured peak with SHAP: 362.7 MB)
+#   * 0.1 CPU         -> no background jobs, no training code in the image
+#   * no disk         -> the model artifact is baked into the image at build time
+#   * spins down 15 min idle -> cold starts are expected; /health stays cheap
+services:
+  - type: web
+    name: churn-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Artifact is committed to the repo, so no object store is needed.
+      - key: CHURN_API__SERVING_MODEL_DIR
+        value: artifacts/model_calibrated
+      - key: CHURN_LOG_LEVEL
+        value: INFO
+      # Set this in the Render dashboard to the Neon pooled connection string.
+      # sync: false means "do not store a value in git".
+      - key: CHURN_DATABASE__URL
+        sync: false
+      # Add the deployed Streamlit origin here once the frontend exists.
+      - key: CHURN_API__CORS_ORIGINS
+        sync: false

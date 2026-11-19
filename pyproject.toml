@@ -45,13 +45,17 @@ mlops = [
     "evidently>=0.4.30",
     "dvc>=3.0",
 ]
-# Dashboard.
-frontend = ["streamlit>=1.31", "plotly>=5.18", "requests>=2.31"]
+# Dashboard. Calls the API over HTTP; never imports the model itself.
+frontend = ["streamlit>=1.31", "requests>=2.31"]
 # Test + lint tooling.
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
+    # starlette.testclient (used for the API tests) needs a transport. Newer
+    # starlette releases require httpx2 specifically and fail at import time
+    # without it, so both are declared rather than relying on httpx alone.
     "httpx>=0.27",
+    "httpx2>=0.27",
     "ruff>=0.3",
     "mypy>=1.8",
 ]

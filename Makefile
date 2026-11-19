@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PIP ?= $(PY) -m pip
 
-.PHONY: help install data validate split train train-quick evaluate-test mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
+.PHONY: help install data validate split train train-quick evaluate-test calibrate explain mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -33,14 +33,20 @@ train-quick:  ## Phase 3 with a tiny budget (smoke test / CI)
 evaluate-test:  ## Phase 3: one-shot held-out test evaluation (requires a freeze)
 	$(PY) -m churn.models.evaluate_test
 
+calibrate:  ## Phase 4: fit sigmoid/isotonic on train, select on validation
+	$(PY) -m churn.models.calibration
+
+explain:  ## Phase 4: build the SHAP report and figures
+	$(PY) -m churn.explain.build_report
+
 mlflow-ui:  ## Open the MLflow tracking UI
 	$(PY) -m mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 
 api:  ## Serve the FastAPI backend on :8000
-	$(PY) -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+	$(PY) -m uvicorn churn.api.main:app --host 0.0.0.0 --port 8000
 
-dashboard:  ## Serve the Streamlit dashboard on :8501
-	$(PY) -m streamlit run frontend/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+dashboard:  ## Serve the Streamlit dashboard on :8501 (needs the API running)
+	$(PY) -m streamlit run src/churn/dashboard/app.py --server.port 8501 --server.address 0.0.0.0
 
 test:  ## Run the test suite with coverage
 	$(PY) -m pytest --cov=src/churn --cov=api --cov-report=term-missing -q

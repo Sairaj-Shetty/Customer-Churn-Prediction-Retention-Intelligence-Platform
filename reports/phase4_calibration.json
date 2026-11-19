@@ -1,0 +1,159 @@
+{
+  "generated_at_utc": "2026-11-19T08:00:47+00:00",
+  "base_model": "random_forest__balanced_subsample",
+  "phase3_threshold": 0.44,
+  "isotonic_appropriate": true,
+  "isotonic_reason": "224 positive events per fold (845 rows/fold) is sufficient for isotonic regression",
+  "baseline": {
+    "method": "none (phase 3 uncalibrated)",
+    "brier_score": 0.1545586364468571,
+    "log_loss": 0.46664251802363205,
+    "roc_auc": 0.8597419204836084,
+    "pr_auc": 0.6740104522537566,
+    "mean_predicted": 0.40707226661656953,
+    "actual_rate": 0.2654364797728886,
+    "calibration_gap": 0.14163578684368094,
+    "optimal_threshold": 0.44,
+    "business_cost": 40900.0,
+    "precision": 0.5046728971962616,
+    "recall": 0.8663101604278075,
+    "f1": 0.6377952755905512,
+    "risk_band_counts": {
+      "Low": 571,
+      "Medium": 440,
+      "High": 398
+    },
+    "calibration_curve": {
+      "mean_predicted": [
+        0.027909181769112838,
+        0.07452339604783452,
+        0.15437417881256574,
+        0.2480605955985305,
+        0.3431649793826935,
+        0.44411015563600864,
+        0.542309371914784,
+        0.6373405345517437,
+        0.7342630686555508,
+        0.8649298838608392
+      ],
+      "fraction_positive": [
+        0.0,
+        0.014184397163120567,
+        0.04964539007092199,
+        0.07801418439716312,
+        0.14893617021276595,
+        0.20714285714285716,
+        0.3262411347517731,
+        0.46808510638297873,
+        0.5815602836879432,
+        0.7801418439716312
+      ]
+    },
+    "applicable": true,
+    "notes": ""
+  },
+  "candidates": [
+    {
+      "method": "sigmoid",
+      "brier_score": 0.13031842989618758,
+      "log_loss": 0.4032055418103982,
+      "roc_auc": 0.8590534501020434,
+      "pr_auc": 0.6722573617530008,
+      "mean_predicted": 0.26814221077255784,
+      "actual_rate": 0.2654364797728886,
+      "calibration_gap": 0.0027057309996692536,
+      "optimal_threshold": 0.21,
+      "business_cost": 41200.0,
+      "precision": 0.5,
+      "recall": 0.8663101604278075,
+      "f1": 0.6340508806262231,
+      "risk_band_counts": {
+        "Low": 870,
+        "Medium": 345,
+        "High": 194
+      },
+      "calibration_curve": {
+        "mean_predicted": [
+          0.02679048477888763,
+          0.03458967061855259,
+          0.0546923387587559,
+          0.08926449442451843,
+          0.14070753691132654,
+          0.22044466488046238,
+          0.3302841971999608,
+          0.455528071151261,
+          0.5881654424785877,
+          0.7406169260559449
+        ],
+        "fraction_positive": [
+          0.0,
+          0.014184397163120567,
+          0.05673758865248227,
+          0.07092198581560284,
+          0.15602836879432624,
+          0.20714285714285716,
+          0.3262411347517731,
+          0.44680851063829785,
+          0.5957446808510638,
+          0.7801418439716312
+        ]
+      },
+      "applicable": true,
+      "notes": "stable 2-parameter plat map"
+    },
+    {
+      "method": "isotonic",
+      "brier_score": 0.1312663207989654,
+      "log_loss": 0.40388893721620206,
+      "roc_auc": 0.8577398021132037,
+      "pr_auc": 0.6687113101874218,
+      "mean_predicted": 0.2667465095640667,
+      "actual_rate": 0.2654364797728886,
+      "calibration_gap": 0.0013100297911781134,
+      "optimal_threshold": 0.24,
+      "business_cost": 41700.0,
+      "precision": 0.5062893081761006,
+      "recall": 0.8609625668449198,
+      "f1": 0.6376237623762376,
+      "risk_band_counts": {
+        "Low": 891,
+        "Medium": 360,
+        "High": 158
+      },
+      "calibration_curve": {
+        "mean_predicted": [
+          0.009782349001413362,
+          0.02653077532628005,
+          0.0521019142260838,
+          0.10213834844532187,
+          0.16023856038083462,
+          0.23848724997333984,
+          0.3163836057875532,
+          0.43312560512094317,
+          0.557879018763227,
+          0.7920533380584533
+        ],
+        "fraction_positive": [
+          0.0049504950495049506,
+          0.019230769230769232,
+          0.056910569105691054,
+          0.08148148148148149,
+          0.14893617021276595,
+          0.21830985915492956,
+          0.3197278911564626,
+          0.46616541353383456,
+          0.574468085106383,
+          0.7872340425531915
+        ]
+      },
+      "applicable": true,
+      "notes": "224 positive events per fold (845 rows/fold) is sufficient for isotonic regression"
+    }
+  ],
+  "selected_method": "sigmoid",
+  "selection_rule": "lowest validation Brier score, tie-break on business cost",
+  "brier_improvement": 0.024240206550669524,
+  "gap_reduction": 0.1389300558440117,
+  "artifact_dir": "/home/user/Customer-Churn-Prediction-Retention-Intelligence-Platform/artifacts/model_calibrated",
+  "calibrated_model_version": "phase4-calibrated-sigmoid"
+}
