@@ -39,15 +39,16 @@ adjustment (NTP, daylight saving) cannot refill every bucket at once.
 from __future__ import annotations
 
 import hmac
+import json
 import secrets
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from churn.logging_utils import get_logger
@@ -132,50 +133,151 @@ def _too_large(max_bytes: int) -> Response:
     )
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+class _BodyTooLarge(Exception):
+    """Internal signal: the streamed body exceeded the cap mid-read."""
+
+
+def _contains_body_too_large(exc: BaseException, *, depth: int = 3) -> bool:
+    """Whether ``exc`` is, or wraps, a :class:`_BodyTooLarge`.
+
+    ``BaseHTTPMiddleware`` dispatches through an anyio TaskGroup, so an exception
+    raised in a downstream ``receive`` call arrives nested inside one or more
+    ``ExceptionGroup``s. ``isinstance`` alone would miss it and the intended 413
+    would surface as an unhandled 500.
+
+    Depth is bounded: a pathological nesting should not turn an error path into an
+    unbounded walk.
+    """
+    if isinstance(exc, _BodyTooLarge):
+        return True
+    if depth <= 0:
+        return False
+    nested = getattr(exc, "exceptions", ()) or ()
+    return any(_contains_body_too_large(item, depth=depth - 1) for item in nested)
+
+
+class BodySizeLimitMiddleware:
     """Reject request bodies larger than ``max_bytes``.
 
-    Runs *before* any handler or validation, so an oversized body never reaches
-    pydantic. Placed outermost in the stack so even CORS preflights are capped.
+    Implemented as **pure ASGI middleware**, not ``BaseHTTPMiddleware``, and that
+    distinction is load-bearing. ``BaseHTTPMiddleware`` exposes the body only by
+    reading ``receive``, which *consumes* it: the downstream app then sees an empty
+    stream. Re-attaching ``request._body`` on the middleware's own ``Request``
+    object does not help, because the downstream app builds a fresh ``Request``
+    from the same already-drained channel — the result is a wall of 422s for
+    perfectly valid requests.
+
+    Working at the ASGI level gives direct access to ``receive``, so a body with no
+    ``Content-Length`` can be counted as it streams and still be delivered intact
+    when it is within the limit.
+
+    Order of checks:
+
+    1. **Declared ``Content-Length`` over the cap** — reject immediately, before a
+       single byte is read.
+    2. **Declared length within the cap** — pass through untouched (fast path; the
+       common case costs one integer comparison).
+    3. **No declared length** (``Transfer-Encoding: chunked``, or a client that
+       simply omits the header) — wrap ``receive`` and count the bytes actually
+       read. A cap that trusts ``Content-Length`` alone is trivially bypassed by
+       omitting the header, which is exactly the case this branch exists for.
     """
 
     def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
-        super().__init__(app)
+        self.app = app
         self.max_bytes = max_bytes
 
-    async def dispatch(
-        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        declared = request.headers.get("content-length")
+    # -- helpers ---------------------------------------------------------- #
+    async def _send_too_large(self, send: Any) -> None:
+        payload = json.dumps(
+            {"detail": f"request body exceeds the {self.max_bytes} byte limit"}
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(payload)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": payload})
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope["headers"]
+        }
+        declared = headers.get("content-length")
+        content_type = headers.get("content-type", "")
+
+        # Multipart bodies are spooled to disk by the form parser beyond a
+        # threshold; only the declared length is meaningful, and a missing
+        # declaration is bounded by the server's own limits.
+        if content_type.lower().startswith("multipart/"):
+            if declared is not None:
+                try:
+                    if int(declared) > self.max_bytes:
+                        await self._send_too_large(send)
+                        return
+                except ValueError:
+                    pass
+            await self.app(scope, receive, send)
+            return
+
         if declared is not None:
-            rejected = _reject_if_declared_too_large(request, self.max_bytes)
-            if rejected is not None:
-                return rejected
+            try:
+                length = int(declared)
+            except ValueError:
+                # A non-numeric Content-Length is malformed. Reject it without
+                # distinguishing the cause from "too large".
+                await self._send_too_large(send)
+                return
+            if length > self.max_bytes:
+                await self._send_too_large(send)
+                return
+            # Within the cap: forward unchanged, no buffering, no extra copy.
+            await self.app(scope, receive, send)
+            return
 
-        if _is_multipart(request):
-            return await call_next(request)
+        # --- No Content-Length: count the streamed bytes. ----------------- #
+        received = 0
+        response_started = False
 
-        # No usable Content-Length: read the body ourselves so the size is
-        # actually verified, then hand the buffered bytes to the app. Reading
-        # past the cap aborts early rather than buffering an unbounded body.
-        body = b""
-        if declared is None:
-            chunks: list[bytes] = []
-            total = 0
-            async for chunk in request.stream():
-                total += len(chunk)
-                if total > self.max_bytes:
-                    return _too_large(self.max_bytes)
-                chunks.append(chunk)
-            body = b"".join(chunks)
-        else:
-            body = await request.body()
+        async def limited_send(message: MutableMapping[str, Any]) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
 
-        if len(body) > self.max_bytes:
-            return _too_large(self.max_bytes)
+        async def limited_receive() -> Any:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise _BodyTooLarge
+            return message
 
-        request._body = body  # noqa: SLF001 - replay for downstream handlers
-        return await call_next(request)
+        try:
+            await self.app(scope, limited_receive, limited_send)
+        except BaseException as exc:  # noqa: BLE001 - re-raised below unless ours
+            # Any downstream `@app.middleware("http")` layer is a
+            # BaseHTTPMiddleware, which runs the app inside an anyio TaskGroup and
+            # re-raises whatever escapes wrapped in an ExceptionGroup. Checking
+            # only for a bare `_BodyTooLarge` therefore turns this 413 into a 500
+            # as soon as one such middleware exists — which is always, in the real
+            # application. Unwrap first, then decide.
+            if not _contains_body_too_large(exc) or response_started:
+                raise
+            # Only replace the response if nothing has been sent yet; once the
+            # status line is on the wire it cannot be changed.
+            await self._send_too_large(send)
 
 
 # --------------------------------------------------------------------------- #
@@ -223,10 +325,18 @@ def require_token(request: Request) -> None:
 # --------------------------------------------------------------------------- #
 @dataclass
 class _Bucket:
-    """One client's token bucket."""
+    """One client's token bucket.
+
+    ``last_seen`` is separate from ``updated`` on purpose: ``updated`` moves when
+    tokens are *added*, while ``last_seen`` only moves when the client actually
+    makes a request. Pruning on ``last_seen`` is what bounds memory — an attacker
+    cycling identities would otherwise leave a permanently-refilled bucket behind
+    for every identity it invented.
+    """
 
     tokens: float
     updated: float
+    last_seen: float = 0.0
 
 
 @dataclass
@@ -249,20 +359,32 @@ class RateLimiter:
 
     @property
     def rate_per_second(self) -> float:
-        return self.capacity / self.window_seconds if self.window_seconds > 0 else float("inf")
+        """Tokens added per second.
+
+        Returns ``0.0`` for a zero capacity rather than dividing by zero: a bucket
+        that can never hold a token is fail-closed, and the caller needs a finite
+        retry interval, not an exception on the request path.
+        """
+        if self.window_seconds <= 0 or self.capacity <= 0:
+            return 0.0
+        return self.capacity / self.window_seconds
 
     def _prune(self, now: float) -> None:
-        """Drop buckets that have fully refilled (they are equivalent to absent)."""
+        """Drop buckets untouched for a full window.
+
+        A client that has not been seen for a whole window would be indistinguishable
+        from a new one anyway (its bucket refills completely in that time), so
+        forgetting it costs nothing and bounds memory against identity cycling.
+        """
         if now - self._last_prune < self.window_seconds:
             return
         self._last_prune = now
-        full = self.capacity
-        refill = self.rate_per_second
-        stale = [key for key, bucket in self.buckets.items() if bucket.tokens >= full]
+        cutoff = now - self.window_seconds
+        stale = [key for key, bucket in self.buckets.items() if bucket.last_seen < cutoff]
         for key in stale:
-            # Re-check: another thread may have consumed from it meanwhile.
+            # Re-check under the lock: another call may have touched it meanwhile.
             bucket = self.buckets.get(key)
-            if bucket is not None and bucket.tokens + (now - bucket.updated) * refill >= full:
+            if bucket is not None and bucket.last_seen < cutoff:
                 self.buckets.pop(key, None)
 
     def consume(self, key: str, *, now: float | None = None) -> tuple[bool, float]:
@@ -273,9 +395,10 @@ class RateLimiter:
 
             bucket = self.buckets.get(key)
             if bucket is None:
-                bucket = _Bucket(tokens=float(self.capacity), updated=moment)
+                bucket = _Bucket(tokens=float(self.capacity), updated=moment, last_seen=moment)
                 self.buckets[key] = bucket
 
+            bucket.last_seen = moment
             elapsed = max(0.0, moment - bucket.updated)
             bucket.tokens = min(
                 float(self.capacity), bucket.tokens + elapsed * self.rate_per_second
@@ -287,7 +410,12 @@ class RateLimiter:
                 return True, 0.0
 
             deficit = 1.0 - bucket.tokens
-            return False, deficit / self.rate_per_second
+            rate = self.rate_per_second
+            if rate <= 0.0:
+                # Never refills (capacity 0 or a non-positive window). Report one
+                # window as the retry hint instead of dividing by zero.
+                return False, float(self.window_seconds) or 60.0
+            return False, deficit / rate
 
 
 def client_identity(request: Request, trusted_proxy_count: int) -> str:

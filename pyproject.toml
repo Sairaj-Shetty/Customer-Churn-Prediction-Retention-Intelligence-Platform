@@ -14,17 +14,31 @@ authors = [{ name = "Sairaj Shetty" }]
 # Core runtime dependencies. Lower bounds are intentionally conservative;
 # the exact tested versions live in requirements.lock.txt.
 dependencies = [
-    "numpy>=1.26",
-    "pandas>=2.0",
-    "scikit-learn>=1.4",
-    "scipy>=1.11",
-    "xgboost>=2.0",
-    "joblib>=1.3",
+    # ---- Pinned to the versions the committed model artifact was built with. ----
+    # These are not style preferences, they are a correctness requirement.
+    # `artifacts/model_calibrated/pipeline.joblib` records its own
+    # `library_versions` ({scikit-learn: 1.5.2, numpy: 2.2.6, pandas: 2.2.3,
+    # xgboost: 3.2.0}) and is unpickled at every API startup.
+    #
+    # Unpinning breaks it: sklearn removed `_RemainderColsList` from
+    # `sklearn.compose._column_transformer`, so loading this artifact under
+    # 1.9.x raises `AttributeError: Can't get attribute '_RemainderColsList'`
+    # and the service cannot start. A `>=` floor silently produces exactly that on
+    # any fresh install, including a Docker build.
+    #
+    # Raising these versions requires retraining and re-committing the artifact.
+    "numpy==2.2.6",
+    "pandas==2.2.3",
+    "scikit-learn==1.5.2",
+    "scipy==1.17.1",
+    "xgboost==3.2.0",
+    "joblib==1.6.0",
+    # ---- Unpinned: no pickle-compatibility coupling to the artifact. ----
     "PyYAML>=6.0",
     "pydantic>=2.5",
     "pydantic-settings>=2.1",
     "python-dotenv>=1.0",
-    "shap>=0.44",
+    "shap==0.51.0",
     "matplotlib>=3.8",
     "seaborn>=0.13",
 ]
