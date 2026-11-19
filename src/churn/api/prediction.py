@@ -29,12 +29,13 @@ from churn.api.schemas import (
     PredictionOut,
 )
 from churn.db.persistence import (
-    persist_batch_task,
-    persist_one_task,
+    persist_batch_with_observations,
+    persist_one_with_observation,
     persistence_status,
 )
 from churn.db.repository import PredictionRecord
 from churn.logging_utils import get_logger
+from churn.monitoring.observer import frame_rows
 
 logger = get_logger(__name__)
 
@@ -154,7 +155,10 @@ def predict_one(
     METRICS.record_predictions(count=1, flagged=predictions[0].predicted_class)
 
     # Queued, not awaited. Runs after the response has been sent.
-    background_tasks.add_task(persist_one_task, records[0], METRICS)
+    # Aggregate observations are built from the same rows the model scored. Only
+    # counts per feature bucket survive; the feature values are discarded here.
+    feature_rows = frame_rows(_to_frame([customer]))
+    background_tasks.add_task(persist_one_with_observation, records[0], feature_rows[0], METRICS)
 
     logger.info(
         "prediction served",
@@ -217,7 +221,8 @@ def predict_batch(
         flagged=sum(item.predicted_class for item in predictions),
     )
 
-    background_tasks.add_task(persist_batch_task, records, METRICS)
+    feature_rows = frame_rows(_to_frame(payload.customers))
+    background_tasks.add_task(persist_batch_with_observations, records, feature_rows, METRICS)
 
     logger.info(
         "prediction served",

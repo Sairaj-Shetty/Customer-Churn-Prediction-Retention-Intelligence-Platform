@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PIP ?= $(PY) -m pip
 
-.PHONY: help install data validate split train train-quick evaluate-test calibrate explain migrate migrate-down migration db-status mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
+.PHONY: help install data validate split train train-quick evaluate-test calibrate explain migrate migrate-down migration db-status monitoring-schema monitoring-reference drift drift-status drift-prune drift-calibrate mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -50,6 +50,24 @@ migration:  ## Autogenerate a revision: make migration m="add column"
 
 db-status:  ## Show the current migration revision
 	$(PY) -m alembic current
+
+monitoring-schema:  ## Freeze bin edges and domains for drift monitoring
+	$(PY) -m churn.monitoring.build_schema
+
+monitoring-reference:  ## Freeze the prediction reference from the validation split
+	$(PY) -m churn.monitoring.prediction_drift --build-reference
+
+drift:  ## Build a drift report from recorded production observations
+	$(PY) -m churn.monitoring.cli report
+
+drift-status:  ## Show what monitoring data exists
+	$(PY) -m churn.monitoring.cli status
+
+drift-prune:  ## Expire deduplication ledger rows
+	$(PY) -m churn.monitoring.cli prune
+
+drift-calibrate:  ## Re-run the sample-size calibration experiment
+	$(PY) -m churn.monitoring.cli calibrate
 
 mlflow-ui:  ## Open the MLflow tracking UI
 	$(PY) -m mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000

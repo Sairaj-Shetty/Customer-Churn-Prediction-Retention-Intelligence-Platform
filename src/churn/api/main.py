@@ -27,7 +27,7 @@ from typing import Any
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from churn.api import explainability, meta, prediction, readiness
+from churn.api import explainability, meta, prediction, readiness, rejections
 from churn.api.inference import ServingBundle
 from churn.api.observability import METRICS
 from churn.config import get_settings
@@ -107,6 +107,11 @@ def create_app() -> FastAPI:
             request.url.path, time.perf_counter() - started, response.status_code
         )
         return response
+
+    # Counts rejected inputs (field + reason only) so an unknown category that
+    # never reaches scoring is still visible to drift monitoring. Never changes
+    # the 422 response body.
+    rejections.install(application)
 
     application.include_router(prediction.router)
     application.include_router(explainability.router)

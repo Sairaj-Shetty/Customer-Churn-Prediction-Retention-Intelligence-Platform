@@ -84,6 +84,9 @@ class BatchResult:
     duplicates: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
+    #: Prediction IDs that were genuinely inserted. Needed downstream: aggregate
+    #: observation must only run for rows that are new, never for duplicates.
+    inserted_ids: set[str] = field(default_factory=set)
 
     @property
     def attempted(self) -> int:
@@ -175,6 +178,7 @@ def save_many(session: Session, records: list[PredictionRecord]) -> BatchResult:
                 session.add(record.to_row())
                 session.flush()
             result.inserted += 1
+            result.inserted_ids.add(record.prediction_id)
         except IntegrityError as exc:
             if _is_idempotency_violation(exc):
                 result.duplicates += 1

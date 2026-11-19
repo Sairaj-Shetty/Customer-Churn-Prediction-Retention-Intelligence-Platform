@@ -33,6 +33,16 @@ artifacts/*
 !artifacts/model_calibrated/
 !artifacts/model_calibrated/pipeline.joblib
 !artifacts/model_calibrated/metadata.json
+# Drift monitoring artifacts are small JSON parameter files (no observations),
+# so they ship with the code: the deployed service must bin features using the
+# same frozen edges the monitoring job uses.
+!artifacts/monitoring/
+!artifacts/monitoring/schema.json
+!artifacts/monitoring/prediction_reference.json
+
+# Generated drift reports are build output, not source.
+reports/drift/drift_*.json
+reports/drift/drift_*.md
 models/
 *.pkl
 *.joblib

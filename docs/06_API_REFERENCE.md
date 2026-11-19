@@ -253,7 +253,9 @@ volumes.
     "mode": "best_effort_async",
     "attempted": 7, "succeeded": 5, "duplicates_suppressed": 2,
     "failed": 0, "retries": 0, "failure_rate": 0.0,
-    "mean_write_ms": 3.1, "last_error_seconds_ago": null
+    "mean_write_ms": 3.1, "last_error_seconds_ago": null,
+    "observations_recorded": 5, "observations_duplicate": 2,
+    "observations_failed": 0
   }
 }
 ```
@@ -346,3 +348,11 @@ make dashboard  # http://localhost:8501 (calls the API over HTTP)
 **Persistence:** implemented as best-effort background writes (Phase 9). There is
 no `/predictions` history endpoint — reading the audit trail is done with SQL, not
 the API. See [`docs/07_DATABASE.md`](07_DATABASE.md).
+
+**Drift monitoring:** collection is entirely in the background and adds no
+endpoint. Reports are generated offline by
+`python -m churn.monitoring.cli report`. See [`docs/08_DRIFT.md`](08_DRIFT.md).
+
+Note that rejected requests (422) now increment an aggregate
+`(feature, reason)` counter. **The 422 response body is unchanged**, and no
+offending value is stored.

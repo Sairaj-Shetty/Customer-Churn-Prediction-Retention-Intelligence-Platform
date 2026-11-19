@@ -1,13 +1,13 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–4, 8 and 9 complete.** Data pipeline, preprocessing, multi-model
+> **Status: Phases 0–4, 8, 9 and 10 complete.** Data pipeline, preprocessing, multi-model
 > training with Optuna/RandomizedSearch tuning, MLflow tracking + registry,
 > leakage-proof model selection, probability calibration, SHAP explainability and
 > the full serving API (`/predict`, `/predict/batch`, `/explain`, `/explain/batch`,
 > `/model/info`, `/model/explainability`, `/metrics`, `/health`, `/ready`) and
-> best-effort PostgreSQL persistence with Alembic migrations are implemented and
-> tested (**445 tests**). Drift monitoring and public deployment follow — see the
-> [roadmap](#roadmap).
+> best-effort PostgreSQL persistence with Alembic migrations, and aggregate-only
+> drift monitoring are implemented and tested (**627 tests**). Public deployment
+> follows — see the [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
 ingest → validate → engineer features → train and compare multiple models →
@@ -124,9 +124,10 @@ by tests rather than glossed over.
                         Neon PostgreSQL — predictions audit log
                         (Alembic-migrated; NO customer features stored)
                                         │
-                  Evidently drift job  ──► baseline: train/val/test split files
-                  (Phase 10)               live distribution: separate artifact,
+                  drift job (Phase 10) ──► reference: split files (frozen bins)
+                                           production: aggregate bucket counts,
                                            NOT this table (it holds no features)
+                                           prediction drift: from this table
 ```
 
 **Serving path invariant:** a prediction never waits on the database. The write is
@@ -250,9 +251,9 @@ make typecheck   # mypy
 Current status:
 
 ```
-445 passed
+627 passed
 ruff: All checks passed!
-mypy: Success: no issues found in 41 source files
+mypy: Success: no issues found in 52 source files
 ```
 
 Coverage includes: checksum verification and tamper rejection, download-failure
@@ -636,9 +637,9 @@ threshold, timestamp.
 
 **Not stored: any customer feature.** No tenure, charges, contract, demographics.
 This is an **audit log, not a feature store** — storing feature vectors would make
-it a PII database with no retention policy. Phase 10 will use the split files as
-the drift **baseline** and a separate production-observation artifact for the live
-distribution; the two have different lifecycles and should not share a table.
+it a PII database with no retention policy. Phase 10 uses the split files as the
+drift **reference** and a separate aggregate-only observation store for the live
+distribution — see [`docs/08_DRIFT.md`](docs/08_DRIFT.md).
 
 ### Best-effort persistence — stated plainly
 
@@ -692,6 +693,125 @@ window and `pool_pre_ping` discards dead connections before use.
 **The platform probe uses `/health`, never `/ready`.** A database-bound liveness
 probe would fail on every idle period and restart the container in a loop that
 cannot fix a sleeping database. `render.yaml` is pinned and a test enforces it.
+
+---
+
+## Drift monitoring (Phase 10)
+
+Full detail: [`docs/08_DRIFT.md`](docs/08_DRIFT.md)
+
+The split files provide a **reference** distribution. Drift needs the
+**production** distribution — a different thing. Phase 9 refused to store customer
+features, so this phase collects production *statistics* instead of records.
+
+### Aggregate-only collection
+
+```
+POST /predict → response returned → background task:
+    1. audit insert (Phase 9, unchanged)
+    2. if INSERTED → record 19 histogram cells
+```
+
+What is stored per observation: one bucket per feature —
+`(feature_name, bucket_kind, bucket_label)` plus a count. A bin label like
+`[12,24)`, a domain value like `Month-to-month`, `__null__`, or `__unseen__`.
+
+What is **not** stored: `customer_id`, any raw feature value, any timestamp finer
+than the day. **No monitoring table has a `customer_id` column** and a test asserts
+it.
+
+**The cost of this choice, stated plainly:** without row-level data we cannot
+detect joint or multivariate drift, and numeric monitoring is limited to bin
+resolution.
+
+**The compensation:** the audit table already stores `churn_probability`,
+`predicted_class` and `risk_band`, giving **prediction drift at full row-level
+fidelity for free** — the output distribution, which is what the business sees.
+
+### Idempotency — an incrementing UPSERT is not enough
+
+`count = count + 1` run twice double-counts, and an inflated bucket **fabricates
+drift**. Two layers prevent it:
+
+1. **Audit gate** — observations record only when the audit insert reports
+   `INSERTED`. A retried `idempotency_key` returns `DUPLICATE`, so nothing is
+   counted twice. Free: the unique index already exists.
+2. **Ledger** — `feature_observation_events.prediction_id` is a primary key, and
+   the insert shares a transaction (savepoint) with the increments. A repeated
+   execution rolls back, so no increment lands.
+
+| Case | Behaviour |
+|---|---|
+| Audit succeeds, aggregate fails | Undercounts by one. **Never overcounts.** |
+| Aggregate succeeds, audit fails | **Impossible** — aggregates run only after a successful audit insert |
+| Task runs twice | Ledger rejects it |
+| Retry with same key | Audit gate rejects it |
+
+Verified: ten retries of one request produce exactly one observation.
+
+### Sample sufficiency
+
+A monitor that cries wolf gets muted, so the floor is measured rather than guessed.
+Resampling the reference **against itself** (zero true drift):
+
+| n | Family false-alarm rate | Detection of a real shift |
+|---|---|---|
+| 100 | 87% | 100% |
+| 200 | 13% | 100% |
+| **400** (default) | **0%** | 100% |
+
+Below 400 the report returns `status: "insufficient_data"` and **no feature
+verdicts at all** — not a cautious number, no number. Evidently does not do this:
+it flags drift on 3 rows drawn from the reference itself.
+
+### Multiple comparisons
+
+19 features at α=0.10 uncorrected ≈ a false alarm in 1 run in 7. So
+**Benjamini–Hochberg** at q=0.10 is applied across the 19, and a feature is called
+drifted only when the effect-size floor *and* the corrected test both agree.
+
+### Methodology
+
+| | Choice |
+|---|---|
+| Numeric | PSI at **frozen** quantile bins |
+| Categorical | **Jensen–Shannon distance** on true marginals |
+| Significance | chi-square GOF on **real bin counts** |
+| Missing values | explicit `__null__` bucket, excluded from the denominator |
+| Unseen categories | explicit `__unseen__` bucket, reported **structurally** |
+| Encoding | **pre-encoding only** — never the 46 one-hot columns |
+
+No synthetic rows are reconstructed. A KS test over 143 copies of a bin midpoint is
+not a hypothesis test, and reporting a p-value from one would be fabricating
+statistical evidence.
+
+Pre-encoding matters: a category vanishing entirely is 1 of 46 one-hot columns
+(effectively invisible) but gives JS distance **0.226** on the raw column.
+
+### Frozen edges, isolated windows
+
+Bin edges come from `train.parquet` and are frozen in
+`artifacts/monitoring/schema.json` with a SHA-256 hash. Re-binning the reference
+reproduces the stored shares **exactly** (Δ = 0.0). Tampered edges are rejected.
+Windows key on `model_version` **and** `schema_hash`, so a deploy or re-binning
+starts fresh rather than blending incomparable distributions.
+
+```bash
+make monitoring-schema      # freeze bins, once per model version
+make monitoring-reference   # freeze the prediction reference
+make drift                  # build + render a report
+make drift-status           # what data exists
+make drift-calibrate        # the experiment behind the 400-row floor
+```
+
+**Verified:** an injected shift (tenure +30, Contract biased) is detected as
+exactly `['tenure', 'Contract']` with the other 17 correctly left alone; a clean
+500-row sample produces zero false alarms.
+
+**Not verified:** anything about real production traffic. Every detection above used
+injected data. Drift detection here is SQLite-tested, **not production-verified** —
+and the calibration experiment that sets the floor is committed at
+`reports/drift/threshold_calibration.json`.
 
 ---
 

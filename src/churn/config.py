@@ -207,6 +207,58 @@ class DatabaseSettings(BaseModel):
         }
 
 
+class DriftSettings(BaseModel):
+    """Drift-monitoring configuration (Phase 10).
+
+    Aggregate-only by design: production feature activity is stored as histogram
+    counts, never as customer records. See ``docs/08_DRIFT.md``.
+    """
+
+    #: Master switch for production observation recording. Off means monitoring
+    #: reports will have no production data — an honest empty state, not an error.
+    enabled: bool = True
+
+    #: Path to the frozen schema artifact. Committed alongside the model so the
+    #: deployed service and offline jobs bin features identically.
+    schema_path: str = "artifacts/monitoring/schema.json"
+
+    #: Counting-window granularity. Daily keeps the row count tiny and makes a
+    #: rolling 7-day view a simple sum over consecutive windows.
+    window_hours: int = 24
+
+    #: Rolling window used to accumulate enough observations for a comparison.
+    rolling_window_days: int = 7
+
+    #: Conservative floor below which feature comparisons are withheld.
+    #:
+    #: This is an **engineering** threshold, not a statistical guarantee. It was
+    #: calibrated by resampling the reference set (see
+    #: ``reports/drift/threshold_calibration.json``): at or below 200 rows,
+    #: Evidently's own tests flagged drift on same-distribution samples in 2 of 3
+    #: seeds; at 400, zero of three. Reporting "insufficient data" is the honest
+    #: answer below it, never a number that looks like evidence.
+    min_observations: int = 400
+
+    #: Family-wise false-discovery rate for Benjamini-Hochberg across the 19
+    #: monitored features. With 19 comparisons a per-feature 0.1 level would
+    #: produce a false alarm on roughly 1 in 7 clean runs.
+    fdr_alpha: float = 0.10
+
+    #: Effect-size floor for PSI (numerical) and JS distance (categorical).
+    #: Per-feature thresholds only; the family-level decision is FDR-corrected.
+    psi_threshold: float = 0.10
+    js_threshold: float = 0.10
+
+    #: Bucket-kind vocabulary is fixed in the repository layer; nothing tunable.
+
+    #: Retention for the deduplication ledger. Long enough to outlive any retry,
+    #: short enough to stay negligible.
+    ledger_retention_days: int = 14
+
+    #: Where generated reports are written.
+    report_dir: str = "reports/drift"
+
+
 class Settings(BaseModel):
     """Root settings object (see module docstring for precedence)."""
 
@@ -219,6 +271,7 @@ class Settings(BaseModel):
     mlflow: MLflowConfig = Field(default_factory=MLflowConfig)
     api: APIConfig = Field(default_factory=APIConfig)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    drift: DriftSettings = Field(default_factory=DriftSettings)
 
     # ------------------------------------------------------------------ #
     @classmethod
