@@ -72,3 +72,35 @@ def test_settings(tmp_path: Path) -> Settings:
             ),
         }
     )
+
+
+@pytest.fixture
+def make_splits():
+    """Synthetic, leakage-free splits for pipeline and artifact tests.
+
+    Built in-memory (not from disk) so these tests stay fast and hermetic.
+    """
+    import numpy as np
+
+    from churn.constants import CATEGORICAL_LEVELS
+    from churn.data.split import prepare_frame, split_dataframe
+
+    rng = np.random.default_rng(11)
+    n = 400
+    data: dict[str, object] = {
+        "customerID": [f"{i:04d}-AB" for i in range(n)],
+        "tenure": rng.integers(0, 73, size=n),
+        "MonthlyCharges": rng.uniform(18, 120, size=n).round(2),
+        "TotalCharges": rng.uniform(0, 8000, size=n).round(2).astype(object),
+        "Churn": rng.choice(["No", "Yes"], size=n, p=[0.735, 0.265]),
+    }
+    for column, levels in CATEGORICAL_LEVELS.items():
+        data[column] = rng.choice(list(levels), size=n)
+
+    frame = pd.DataFrame(data)
+    frame["TotalCharges"] = frame["TotalCharges"].astype(object)
+    # Inject the real dataset's defect: blanks at tenure 0.
+    frame.loc[frame.index[:3], "TotalCharges"] = " "
+
+    prepared = prepare_frame(frame)
+    return split_dataframe(prepared, val_size=0.2, test_size=0.2, random_state=42)

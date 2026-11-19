@@ -1,8 +1,8 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–1 complete.** Project scaffold, configuration, structured
-> logging, dataset acquisition with checksum verification, EDA and DVC
-> pipeline versioning are implemented and tested. Modelling, API, dashboard and
+> **Status: Phases 0–2 complete.** Scaffold, configuration, structured logging,
+> verified data acquisition, EDA, validation contract, leakage-safe splitting
+> and the preprocessing pipeline are implemented and tested (108 tests). Modelling, API, dashboard and
 > deployment follow in later phases — see the [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
@@ -66,7 +66,7 @@ a single discount. The project therefore optimises **PR-AUC** and an explicit
 | Defect | Evidence | Handling |
 |---|---|---|
 | `TotalCharges` stored as text | 11 blank values | Coerce to numeric |
-| Those 11 blanks are not random | **All have `tenure == 0`** | Impute `0` (structural, not MAR) |
+| Those 11 blanks are not random | **All have `tenure == 0`** | Median imputer inside pipeline (see below) |
 | `customerID` is an identifier | 7,043 unique, 0 duplicates | Dropped before training |
 | Wrong primary metric temptation | 73.46% achievable by predicting "stay" | Optimise PR-AUC, not accuracy |
 
@@ -229,14 +229,130 @@ make typecheck   # mypy
 Current status:
 
 ```
-50 passed
+108 passed
 ruff: All checks passed!
-mypy: Success: no issues found in 7 source files
+mypy: Success: no issues found
 ```
 
 Coverage includes: checksum verification and tamper rejection, download-failure
 cleanup, ingestion caching, every EDA statistic, config precedence, and PII
 redaction in logs.
+
+---
+
+## Preprocessing decision: `TotalCharges`
+
+### The decision
+
+`TotalCharges` is stored as **text** in the raw CSV and contains 11 blank values.
+The project handles it in three strictly separated stages:
+
+| Stage | What happens | Why here |
+|---|---|---|
+| **1. Before splitting** (`churn.data.split`) | `pd.to_numeric(..., errors="coerce")` — blanks and invalid text become `NaN` | Deterministic, row-wise, learns nothing → cannot leak |
+| **2. Inside the pipeline** (`churn.features.pipeline`) | `SimpleImputer(strategy="median")`, fitted on **training rows only** | Learns a statistic → must never see val/test |
+| **3. At inference** (`/predict` etc.) | Same coercion, then the **frozen** training median | Never compute a new median |
+
+### Why convert before the split, but impute inside the pipeline
+
+These two steps are separated because they are fundamentally different operations:
+
+- **Type conversion is stateless.** Converting `"1234.56"` to `1234.56` produces
+  the same answer regardless of which rows you look at. Doing it once, before
+  splitting, means the stored parquet artifacts have correct dtypes and every
+  downstream consumer gets consistent input. There is nothing to leak.
+- **Imputation is stateful.** A median is a *learned statistic*. Computing it
+  from all 7,043 rows would let information from the test set influence the
+  training data — classic **data leakage**, which inflates validation scores and
+  collapses in production.
+
+So: coercion is applied globally, imputation is fitted on training data only.
+
+### Verified: the leakage this prevents is real, not theoretical
+
+| Statistic | Value |
+|---|---|
+| Median fitted on **training split only** | **1373.62** |
+| Median of the **full dataset** (must never be used) | 1397.48 |
+| NaN rows distributed across splits | train 7 · validation 1 · test 3 |
+
+The 23.86 difference is why `test_imputer_median_matches_train_only` asserts the
+fitted median equals the *train* median exactly — and a companion test proves
+that fitting on the full dataset produces a genuinely different number, so the
+assertion cannot pass vacuously.
+
+### Inference behaviour (requirement 8 and 9)
+
+The saved artifact is one self-contained sklearn `Pipeline`:
+
+```
+coerce (blanks → NaN)  →  SimpleImputer(median, FROZEN)  →  OneHotEncoder  →  model
+```
+
+A raw API payload containing `"TotalCharges": " "`, `null`, `""` or an absent
+key is coerced to `NaN` and imputed with the **median learned during training**.
+Verified on the real dataset:
+
+```
+Raw serving row with blank TotalCharges: ' '
+  -> predicted probability: 0.214958
+  -> with training median    : 0.214958
+  identical? True
+```
+
+Because the median lives inside the pickled pipeline object, there is no code
+path that can recompute it. Requirement 9 holds *by construction*, not by
+convention.
+
+### Tradeoff, stated honestly
+
+Median imputation is the standard, robust choice for a right-skewed, currency-
+valued column, and it is statistically defensible for genuinely random
+missingness. **It is worth noting that all 11 affected customers have
+`tenure == 0`**, i.e. they are brand-new signups with unusually low
+`MonthlyCharges`, so imputing the population median (`1373.62`) assigns them
+accumulated charges that a customer one month into their contract cannot
+plausibly have.
+
+The affected group is 0.16% of the dataset, so the effect on aggregate metrics is
+negligible. A domain-informed alternative — imputing `0`, or `MonthlyCharges ×
+tenure` — is arguably more faithful for this specific cohort, and is documented
+here as a deliberate, evidence-backed choice rather than an oversight. Median
+imputation is retained because it generalises to unseen missingness patterns,
+which a hard-coded `0` rule does not.
+
+### Reproducing this stage
+
+```bash
+python -m churn.data.validate     # schema contract  -> PASSED
+python -m churn.data.split        # 4225 / 1409 / 1409, NaN preserved
+dvc repro                         # ingest -> validate -> split -> eda
+```
+
+Expected split output:
+
+```
+  split           rows    churn rate    TotalCharges NaN
+  train          4,225       26.53%                   7
+  validation     1,409       26.54%                   1
+  test           1,409       26.54%                   3
+Note: NaNs are preserved by design — imputation happens inside the pipeline.
+```
+
+### Tests covering this decision
+
+`tests/unit/test_preprocessing.py` and `tests/unit/test_artifact.py`:
+
+| Case | Test |
+|---|---|
+| Blank strings | `test_blank_strings_become_nan` (space, empty, whitespace) |
+| Missing values | `test_none_becomes_nan`, `test_nan_stays_nan` |
+| Invalid numeric values | `test_invalid_text_becomes_nan` (`abc`, `12,34`, `$100`, `N/A`, `--`) |
+| No in-place mutation | `test_coercion_does_not_mutate_input`, `test_prepare_does_not_mutate_input` |
+| Train/inference consistency | `test_blank_total_charges_at_inference_uses_training_median` |
+| No new median at serving | `test_imputer_median_is_frozen_after_fit` |
+| No leakage from val/test | `test_imputer_median_matches_train_only`, `test_test_rows_never_enter_fit` |
+| Artifact round-trip | `test_round_trip_predictions_are_identical` |
 
 ---
 
@@ -246,8 +362,8 @@ redaction in logs.
 |---|---|---|
 | 0 | Scaffold, config, logging, lint/test tooling | ✅ done |
 | 1 | Data acquisition, EDA, DVC, data card | ✅ done |
-| 2 | Data validation contract + stratified 60/20/20 split | next |
-| 3 | Preprocessing pipeline + feature engineering (leakage tests) | planned |
+| 2 | Validation contract, splitting, preprocessing pipeline, artifact | ✅ done |
+| 3 | Model training + hyperparameter tuning | next |
 | 4 | Multi-model training, tuning, threshold optimisation | planned |
 | 5 | Evaluation and justified model selection | planned |
 | 6 | MLflow tracking + model registry | planned |

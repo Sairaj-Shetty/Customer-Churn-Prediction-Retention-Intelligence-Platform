@@ -9,8 +9,8 @@ stages:
       size: 5584
     - path: src/churn/data/ingest.py
       hash: md5
-      md5: a8a6d459e1367cfe21a1d1c62b148428
-      size: 10559
+      md5: c94147c365e57b3890f33b4db5dccdb2
+      size: 10644
     outs:
     - path: data/raw/Telco-Customer-Churn.csv
       hash: md5
@@ -18,7 +18,7 @@ stages:
       size: 970457
     - path: data/raw/dataset.meta.json
       hash: md5
-      md5: a9d06b7894259c3a5b12d39856a0c5da
+      md5: 84a015bcd2539065b3ae22c10ad084dd
       size: 464
   eda:
     cmd: .venv/bin/python -m churn.data.eda
@@ -29,15 +29,71 @@ stages:
       size: 970457
     - path: src/churn/data/eda.py
       hash: md5
-      md5: 9a07de141aae3b672af79b3bf793dc52
-      size: 21828
+      md5: d2adb83e21ccb4a25b35eb5a73f68996
+      size: 22039
     outs:
     - path: reports/eda_report.md
       hash: md5
-      md5: 2225ff950d75cb3df077ad4b7865ad96
+      md5: 4e1125f0ac5f13705a0edb2e74cb89c1
       size: 5295
     - path: reports/figures
       hash: md5
       md5: eb5196611eb31229999f46be26ce6548.dir
       size: 358290
       nfiles: 6
+  validate:
+    cmd: .venv/bin/python -m churn.data.validate
+    deps:
+    - path: data/raw/Telco-Customer-Churn.csv
+      hash: md5
+      md5: 3b0bfab28a8101b4e4fdd08025a5c235
+      size: 970457
+    - path: src/churn/constants.py
+      hash: md5
+      md5: d52b519563537f0551f03b0409e581b0
+      size: 5584
+    - path: src/churn/data/validate.py
+      hash: md5
+      md5: 252c9b6d33d43d2ecef0ecae570e6a3e
+      size: 12108
+  split:
+    cmd: .venv/bin/python -m churn.data.split
+    deps:
+    - path: configs/config.yaml
+      hash: md5
+      md5: 8b35832b37f124dec0e73add17738468
+      size: 1266
+    - path: data/raw/Telco-Customer-Churn.csv
+      hash: md5
+      md5: 3b0bfab28a8101b4e4fdd08025a5c235
+      size: 970457
+    - path: src/churn/data/split.py
+      hash: md5
+      md5: 6952ca73fc632467bed21480e23272f3
+      size: 11213
+    - path: src/churn/data/validate.py
+      hash: md5
+      md5: 252c9b6d33d43d2ecef0ecae570e6a3e
+      size: 12108
+    params:
+      configs/config.yaml:
+        data.random_state: 42
+        data.test_size: 0.2
+        data.val_size: 0.2
+    outs:
+    - path: data/processed/split_metadata.json
+      hash: md5
+      md5: eacdcc8961267ac814dc006c7d3fc141
+      size: 951
+    - path: data/processed/test.parquet
+      hash: md5
+      md5: fee6259525cd9ff8c96f229dfcdad094
+      size: 32636
+    - path: data/processed/train.parquet
+      hash: md5
+      md5: 19e48706aef8e7172d5535a4a2c220fc
+      size: 69166
+    - path: data/processed/validation.parquet
+      hash: md5
+      md5: 39a092e84b42bc76e1302d6f82c3a8f4
+      size: 32654

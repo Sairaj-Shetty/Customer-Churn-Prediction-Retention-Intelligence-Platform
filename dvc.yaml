@@ -19,6 +19,38 @@ stages:
       - data/raw/dataset.meta.json:
           cache: false
 
+  validate:
+    desc: Enforce the data schema contract before anything is trained.
+    cmd: .venv/bin/python -m churn.data.validate
+    deps:
+      - src/churn/data/validate.py
+      - src/churn/constants.py
+      - data/raw/Telco-Customer-Churn.csv
+    always_changed: false
+
+  split:
+    desc: Coerce dtypes (TotalCharges to numeric; NaN preserved) then split 60/20/20.
+    cmd: .venv/bin/python -m churn.data.split
+    deps:
+      - src/churn/data/split.py
+      - src/churn/data/validate.py
+      - configs/config.yaml
+      - data/raw/Telco-Customer-Churn.csv
+    # Track the real config file (not a duplicated params.yaml) so the split
+    # is invalidated whenever the configured proportions or seed change.
+    params:
+      - configs/config.yaml:
+          - data.val_size
+          - data.test_size
+          - data.random_state
+    outs:
+      - data/processed/train.parquet
+      - data/processed/validation.parquet
+      - data/processed/test.parquet
+    metrics:
+      - data/processed/split_metadata.json:
+          cache: false
+
   eda:
     desc: Compute statistics and render the EDA report and figures.
     cmd: .venv/bin/python -m churn.data.eda

@@ -1,6 +1,6 @@
 # Exploratory Data Analysis — IBM Telco Customer Churn
 
-_Generated automatically by `python -m churn.data.eda` on 2026-11-19 06:25 UTC._
+_Generated automatically by `python -m churn.data.eda` on 2026-11-19 06:33 UTC._
 
 All figures and numbers below are computed from the verified raw dataset; nothing is hand-entered.
 

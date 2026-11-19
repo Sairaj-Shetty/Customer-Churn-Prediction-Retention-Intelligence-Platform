@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PIP ?= $(PY) -m pip
 
-.PHONY: help install data validate train evaluate mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
+.PHONY: help install data validate split train evaluate mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -20,6 +20,9 @@ data:  ## Phase 1: download/verify the raw dataset (SHA-256 checked)
 
 validate:  ## Phase 2: run the data validation contract
 	$(PY) -m churn.data.validate
+
+split:  ## Phase 2: coerce dtypes then split 60/20/20 (NaN preserved)
+	$(PY) -m churn.data.split
 
 train:  ## Phase 4-6: split, train, tune, evaluate, log to MLflow
 	$(PY) -m churn.models.train

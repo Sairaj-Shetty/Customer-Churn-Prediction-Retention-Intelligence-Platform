@@ -95,12 +95,19 @@ service is not held".
 - **Why it matters:** because the blanks are the *string* `" "` rather than
   `NaN`, `pandas.isna()` reports **zero missing values**. A naive
   missing-value check therefore misses this entirely — a genuine trap.
-- **Handling:** coerce to numeric (blanks → NaN inside the pipeline), then
-  **impute `0`**. A new customer has accumulated zero charges; imputing the
-  mean/median would invent revenue that does not exist, and dropping the rows
-  would remove the highest-churn cohort in the dataset (tenure 0).
-- This is **structural missingness, not missing-at-random**, which is why a
-  constant-0 imputation is the statistically honest choice.
+- **Handling (final decision):**
+  1. Coerce to numeric **before splitting** with
+     `pd.to_numeric(..., errors="coerce")`, so blanks and invalid text become
+     `NaN`. This is stateless and therefore leakage-free.
+  2. Impute with `SimpleImputer(strategy="median")` **inside the sklearn
+     pipeline**, fitted on the training split only. Validation, test and all API
+     requests reuse that frozen median.
+- This is **structural missingness, not missing-at-random**. Median imputation
+  is used anyway because it generalises to unseen missingness patterns at
+  serving time. The tradeoff is documented in the README: all 11 affected
+  customers have `tenure == 0`, so the population median (1373.62) is
+  economically implausible for a brand-new signup, though the group is only
+  0.16% of the data.
 
 ### D2. No missing values anywhere else
 
@@ -128,7 +135,7 @@ would be a business error disguised as data cleaning.
 | Risk | Mitigation |
 |---|---|
 | `customerID` memorisation | Dropped. |
-| Fitting encoders/scalers on the full dataset | Fitting happens **inside** the sklearn `Pipeline`, on training folds only. A dedicated test (`test_pipeline_leakage.py`) proves it. |
+| Fitting imputers/encoders/scalers on the full dataset | Fitting happens **inside** the sklearn `Pipeline`, on training rows only. `tests/unit/test_preprocessing.py::TestNoLeakage` proves the fitted median equals the train median and is unmoved by poisoning the test set. |
 | Tuning the threshold on the test set | Three-way split: validation drives all decisions, test is used once. |
 
 ---
