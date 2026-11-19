@@ -193,38 +193,60 @@ def page_predict(info: dict[str, Any]) -> None:
         "TotalCharges": total,
     }
 
-    with st.spinner("Explaining…"):
-        payload, error = call_api("POST", "/explain", json=customer)
+    with st.spinner("Scoring…"):
+        prediction, error = call_api("POST", "/predict", json=customer)
 
     if error:
         st.error(error)
         return
-    assert payload is not None
-    render_explanation(payload, info)
+    assert prediction is not None
+
+    with st.spinner("Explaining…"):
+        payload, explain_error = call_api("POST", "/explain", json=customer)
+
+    # The explanation is optional: a prediction is still useful without SHAP
+    # (and the SHAP path is the expensive one on a free tier).
+    if explain_error:
+        st.warning(f"Explanation unavailable: {explain_error}")
+
+    render_explanation(payload, info, prediction=prediction)
 
 
-def render_explanation(payload: dict[str, Any], info: dict[str, Any]) -> None:
-    """Render risk, drivers and the calibration caveat."""
-    probability = payload["churn_probability"]
-    threshold = payload["threshold"]
+def render_explanation(
+    payload: dict[str, Any] | None,
+    info: dict[str, Any],
+    *,
+    prediction: dict[str, Any],
+) -> None:
+    """Render the score card, the divergence note and (if present) the drivers.
 
-    metric_col, verdict_col, raw_col = st.columns(3)
+    The score card is driven by ``/predict``; the drivers by ``/explain``. Both
+    read the same server-side bundle, so their probabilities are identical.
+    """
+    probability = prediction["churn_probability"]
+    basis = prediction["decision_basis"]
+
+    metric_col, verdict_col, band_col = st.columns(3)
     metric_col.metric("Churn probability", f"{probability:.1%}")
     verdict_col.metric(
         "Decision",
-        "🔴 At risk" if payload["predicted_class"] == 1 else "🟢 Likely retained",
-        help=f"Threshold {threshold:.2f}",
+        "🔴 At risk" if prediction["predicted_class"] == 1 else "🟢 Likely retained",
+        help=f"Cost-optimised threshold {basis['threshold']:.2f}",
     )
-    raw_col.metric(
-        "Raw model score",
-        f"{payload['raw_score']:.3f}",
-        help="Uncalibrated score. SHAP contributions are additive in THIS number, not in the probability.",
-    )
+    band_col.metric("Risk band", prediction["risk_band"])
 
     st.progress(min(max(probability, 0.0), 1.0))
 
-    band = "high" if probability >= 0.6 else "moderate" if probability >= 0.3 else "low"
-    st.markdown(f"**{band.capitalize()} risk** · decision threshold {threshold:.2f}")
+    # The threshold sits below the lowest band bound, so the two verdicts often
+    # differ. Explain rather than let the user think something is broken.
+    if not basis["class_agrees_with_band"]:
+        st.warning(f"⚠️ {basis['note']}")
+    else:
+        st.caption(basis["note"])
+
+    if payload is None:
+        st.info("Drivers are unavailable, but the score above is valid.")
+        return
 
     st.success(payload["summary"])
 
@@ -249,6 +271,11 @@ def render_explanation(payload: dict[str, Any], info: dict[str, Any]) -> None:
     with right:
         st.markdown("🔻 **Reduces risk**")
         bar(payload["top_decreasing"], positive=False)
+
+    st.caption(
+        f"Raw model score {payload['raw_score']:.3f} (uncalibrated). SHAP "
+        "contributions are additive in that number, not in the probability above."
+    )
 
     with st.expander("All feature contributions"):
         table = pd.DataFrame(payload["contributions"])[
@@ -364,7 +391,7 @@ def page_batch(info: dict[str, Any]) -> None:
     customers = frame.to_dict(orient="records")
     with st.spinner(f"Scoring {len(customers)} customers…"):
         payload, error = call_api(
-            "POST", "/explain/batch", json={"customers": customers}, timeout=COLD_START_TIMEOUT
+            "POST", "/predict/batch", json={"customers": customers}, timeout=COLD_START_TIMEOUT
         )
 
     if error:
@@ -374,14 +401,11 @@ def page_batch(info: dict[str, Any]) -> None:
 
     results = pd.DataFrame(
         {
-            "churn_probability": [e["churn_probability"] for e in payload["explanations"]],
+            "churn_probability": [e["churn_probability"] for e in payload["predictions"]],
+            "risk_band": [e["risk_band"] for e in payload["predictions"]],
             "decision": [
                 "at risk" if e["predicted_class"] == 1 else "retained"
-                for e in payload["explanations"]
-            ],
-            "top_driver": [
-                e["top_increasing"][0]["feature"] if e["top_increasing"] else "—"
-                for e in payload["explanations"]
+                for e in payload["predictions"]
             ],
         }
     ).sort_values("churn_probability", ascending=False)

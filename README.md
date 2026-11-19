@@ -1,11 +1,12 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–4 complete.** Data pipeline, preprocessing, multi-model
+> **Status: Phases 0–4 and 8 complete.** Data pipeline, preprocessing, multi-model
 > training with Optuna/RandomizedSearch tuning, MLflow tracking + registry,
-> leakage-proof model selection, probability calibration and SHAP explainability
-> are implemented and tested (**297 tests**). A runnable explainability API and a
-> Streamlit dashboard exist; the remaining serving, persistence, drift and
-> deployment work follows in later phases — see the [roadmap](#roadmap).
+> leakage-proof model selection, probability calibration, SHAP explainability and
+> the full serving API (`/predict`, `/predict/batch`, `/explain`, `/explain/batch`,
+> `/model/info`, `/model/explainability`, `/metrics`, `/health`) are implemented
+> and tested (**383 tests**). Database persistence, drift monitoring and public
+> deployment follow — see the [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
 ingest → validate → engineer features → train and compare multiple models →
@@ -231,14 +232,16 @@ make typecheck   # mypy
 Current status:
 
 ```
-216 passed (1 slow deselected)
+383 passed
 ruff: All checks passed!
-mypy: Success: no issues found in 20 source files
+mypy: Success: no issues found in 34 source files
 ```
 
 Coverage includes: checksum verification and tamper rejection, download-failure
-cleanup, ingestion caching, every EDA statistic, config precedence, and PII
-redaction in logs.
+cleanup, ingestion caching, every EDA statistic, config precedence, PII redaction
+in logs, leakage guards on the frozen selection, calibration method selection,
+SHAP additivity, one-hot grouping, and every API endpoint including validation
+rejection and cross-endpoint consistency.
 
 ---
 
@@ -525,6 +528,72 @@ prediction. Valid levels are declared as schema literals, turning a typo into a
 
 ---
 
+## Serving API (Phase 8)
+
+Full reference: [`docs/06_API_REFERENCE.md`](docs/06_API_REFERENCE.md) ·
+Interactive docs: `/docs`
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /predict` | Probability, class and risk band for one customer |
+| `POST /predict/batch` | Same for up to 100 customers |
+| `POST /explain` | Deterministic SHAP explanation |
+| `POST /explain/batch` | Up to 100 explanations |
+| `GET /model/info` | Model card + frozen ML evaluation metrics |
+| `GET /model/explainability` | Explanation method, grouping, global importance |
+| `GET /metrics` | Operational metrics (service health) |
+| `GET /health` | Liveness probe |
+
+One artifact is loaded at startup and shared by every router, so `/predict` and
+`/explain` cannot disagree — asserted by a test comparing both endpoints for the
+same customer.
+
+### The frozen threshold is below the lowest risk band
+
+`predicted_class` and `risk_band` answer different questions and legitimately
+disagree:
+
+* `predicted_class` applies the **cost-optimised threshold 0.21** (a missed
+  churner costs 10x a wasted offer)
+* `risk_band` applies **fixed tiers**: Low < 0.30, Medium < 0.60, High
+
+Measured on validation, **454 of 648 churn predictions (70%) fall in Low or
+Medium risk** — a customer at p = 0.236 is "Low risk" *and* flagged. This is
+correct: the threshold is an action trigger, the band is a presentation tier.
+Every response includes a `decision_basis` block stating the threshold, its
+provenance and a plain-language explanation, and a test pins the behaviour so
+nobody "fixes" it by quietly moving the threshold.
+
+The model flags **~46% of customers**, a direct consequence of FN:FP = 10:1. That
+is screening behaviour, not outreach volume.
+
+### Operational vs ML metrics are kept apart
+
+| | `/metrics` | `/model/info` |
+|---|---|---|
+| Describes | the service | the model |
+| Lifetime | resets on restart | fixed at training time |
+| Examples | latency, error rate, request counts | PR-AUC, Brier, recall, business cost |
+
+Mixing them invites quoting traffic volume as evidence of model quality. They are
+separate data structures behind separate endpoints, and a test asserts the two
+payloads share no keys.
+
+`prometheus-client` was deliberately **not** added: four counters do not justify a
+new dependency on a 512 MB tier. The in-process registry is bounded (online
+mean/min/max latencies, capped endpoint and field keys) and documented as
+per-process — with a single worker, that is the whole truth.
+
+### Input validation is strict
+
+The pipeline encodes with `handle_unknown="ignore"`, so an unknown category
+becomes an all-zero row and the model still returns a confident prediction. Valid
+levels are declared as schema literals, turning a typo into a **422** instead of a
+wrong score. `TotalCharges` still accepts blanks, because the real dataset has
+them and imputation is the correct handling.
+
+---
+
 ## Deployment on a ₹0 budget
 
 The deployment target is **strictly free**: no paid services, no credit card, no
@@ -636,8 +705,8 @@ verified without the maintainer's accounts.
 | 2 | Validation contract, splitting, preprocessing pipeline, artifact | ✅ done |
 | 3 | 4 models × weighting variants, Optuna/RandomizedSearch, threshold optimisation, MLflow tracking + registry, frozen selection | ✅ done |
 | 4 | Probability calibration (sigmoid vs isotonic), SHAP global + local explainability with one-hot grouping, explainability API, dashboard | ✅ done |
-| 8 | Full FastAPI backend (predict, batch, metrics, model info) | partial — explainability endpoints live |
-| 9 | PostgreSQL persistence | planned |
+| 8 | Full FastAPI backend: predict, batch predict, metrics, model info | ✅ done |
+| 9 | PostgreSQL persistence (Neon) | next |
 | 10 | Evidently drift monitoring | planned |
 | 11 | Streamlit dashboard | planned |
 | 12 | Docker, CI/CD, cloud deployment, documentation | planned |

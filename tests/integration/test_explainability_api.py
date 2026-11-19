@@ -163,7 +163,7 @@ class TestSchemaMatchesPipeline:
     def test_levels_match_constants(self):
         from typing import get_args
 
-        from churn.api import explainability as api
+        from churn.api import schemas as api
         from churn.constants import CATEGORICAL_LEVELS
 
         pairs = {
@@ -190,7 +190,7 @@ class TestSchemaMatchesPipeline:
             )
 
     def test_every_categorical_column_is_covered(self):
-        from churn.api import explainability as api
+        from churn.api import schemas as api
         from churn.constants import CATEGORICAL_LEVELS
 
         schema_fields = set(api.CustomerFeatures.model_fields)

@@ -29,99 +29,31 @@ sum contributions and expect the probability.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field
 
+# The bundle and request schema are shared with /predict so the two endpoints can
+# never disagree about what a valid customer is, which model is loaded, or which
+# threshold is applied.
+from churn.api.prediction import get_bundle
+from churn.api.schemas import MAX_BATCH_ROWS, BatchPredictionRequest, CustomerFeatures
 from churn.config import get_settings
 from churn.explain.shap_explainer import (
     CAUSATION_DISCLAIMER,
-    ChurnExplainer,
     Explanation,
     GlobalImportance,
 )
 from churn.logging_utils import get_logger
-from churn.models.artifact import ModelArtifact
 
 logger = get_logger(__name__)
-
-#: Upper bound on a batch explain request. SHAP on 100 rows is ~0.6 s; 500 would
-#: be ~3 s and risks a free-tier timeout. Rejecting early is kinder than timing
-#: out mid-request.
-MAX_BATCH_ROWS = 100
 
 
 # --------------------------------------------------------------------------- #
 # Schemas
 # --------------------------------------------------------------------------- #
-# Categorical level enums.
-#
-# Why bother: the pipeline encodes with ``handle_unknown="ignore"``, so an
-# unrecognised category becomes an all-zero one-hot row and the model still
-# returns a *confident* prediction. A frontend typo ("Yes" -> "yes") would
-# silently produce a wrong score instead of an error. Declaring the valid levels
-# as schema literals turns that into a 422 at the edge, which is the honest
-# behaviour — the model never saw that category, so it has nothing to say.
-#
-# These are spelled out rather than generated from ``CATEGORICAL_LEVELS`` because
-# static type checkers cannot use a function call as an annotation. Drift is
-# prevented by ``test_levels_match_constants``, which asserts equality with the
-# single source of truth.
-Gender = Literal["Female", "Male"]
-YesNo = Literal["No", "Yes"]
-YesNoInternet = Literal["No", "Yes", "No internet service"]
-YesNoPhone = Literal["No", "Yes", "No phone service"]
-InternetServiceLevel = Literal["DSL", "Fiber optic", "No"]
-ContractLevel = Literal["Month-to-month", "One year", "Two year"]
-PaymentMethodLevel = Literal[
-    "Bank transfer (automatic)",
-    "Credit card (automatic)",
-    "Electronic check",
-    "Mailed check",
-]
-
-
-class CustomerFeatures(BaseModel):
-    """One customer's raw features, exactly as the model expects them."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    gender: Gender
-    SeniorCitizen: str | int = Field(  # noqa: N815 - mirrors the dataset's column names
-        description="0/1 or '0'/'1'.",
-    )
-    Partner: YesNo
-    Dependents: YesNo
-    tenure: float = Field(ge=0, le=100, description="Months as a customer.")
-    PhoneService: YesNo
-    MultipleLines: YesNoPhone
-    InternetService: InternetServiceLevel
-    OnlineSecurity: YesNoInternet
-    OnlineBackup: YesNoInternet
-    DeviceProtection: YesNoInternet
-    TechSupport: YesNoInternet
-    StreamingTV: YesNoInternet
-    StreamingMovies: YesNoInternet
-    Contract: ContractLevel
-    PaperlessBilling: YesNo
-    PaymentMethod: PaymentMethodLevel
-    MonthlyCharges: float = Field(ge=0, description="Current monthly charge.")
-    TotalCharges: float | str | None = Field(  # noqa: N815
-        default=None,
-        description="Blank string is accepted; it is imputed using the frozen training median.",
-    )
-
-    @field_validator("SeniorCitizen")
-    @classmethod
-    def _validate_senior(cls, value: str | int) -> str:
-        if str(value) not in {"0", "1"}:
-            raise ValueError("SeniorCitizen must be 0 or 1")
-        return str(value)
-
-
 class ContributionOut(BaseModel):
     feature: str
     contribution: float
@@ -142,10 +74,6 @@ class ExplanationOut(BaseModel):
     disclaimer: str
     additivity_note: str
     output_space: str
-
-
-class BatchExplainRequest(BaseModel):
-    customers: list[CustomerFeatures] = Field(min_length=1, max_length=MAX_BATCH_ROWS)
 
 
 class BatchExplainResponse(BaseModel):
@@ -174,43 +102,6 @@ class ExplainabilityInfo(BaseModel):
     grouping_method: str
     causation_disclaimer: str
     global_importance: list[GlobalImportanceOut]
-
-
-# --------------------------------------------------------------------------- #
-# Explainer cache
-# --------------------------------------------------------------------------- #
-@dataclass
-class ExplainerBundle:
-    """The loaded artifact plus its explainer, cached for the app's lifetime."""
-
-    artifact: ModelArtifact
-    explainer: ChurnExplainer
-
-
-def get_bundle(request: Request) -> ExplainerBundle:
-    """Fetch the startup-built bundle, or fail loudly."""
-    bundle = getattr(request.app.state, "explainer_bundle", None)
-    if bundle is None:  # pragma: no cover - only if lifespan was bypassed
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="explainer not initialised",
-        )
-    return bundle
-
-
-def build_bundle() -> ExplainerBundle:
-    """Load the artifact and construct the explainer (called once at startup)."""
-    settings = get_settings()
-    artifact = ModelArtifact.load(settings.resolve(settings.api.serving_model_dir))
-    explainer = ChurnExplainer(artifact)
-    logger.info(
-        "explainer ready",
-        extra={
-            "model_version": artifact.metadata.model_version,
-            "parent_features": explainer.mapping.n_parents,
-        },
-    )
-    return ExplainerBundle(artifact=artifact, explainer=explainer)
 
 
 def _frames(customers: list[CustomerFeatures]) -> pd.DataFrame:
@@ -256,7 +147,7 @@ def explain_one(customer: CustomerFeatures, request: Request) -> ExplanationOut:
     response_model=BatchExplainResponse,
     summary=f"Explain up to {MAX_BATCH_ROWS} customers",
 )
-def explain_batch(payload: BatchExplainRequest, request: Request) -> BatchExplainResponse:
+def explain_batch(payload: BatchPredictionRequest, request: Request) -> BatchExplainResponse:
     """Batch explanations.
 
     One SHAP call for the whole batch rather than a loop: ``TreeExplainer``
@@ -332,7 +223,7 @@ def explainability_info(request: Request) -> ExplainabilityInfo:
 @router.get("/health", tags=["ops"], summary="Liveness probe")
 def health(request: Request) -> dict[str, Any]:
     """Cheap liveness check — no SHAP, no heavy work (free-tier cold starts)."""
-    bundle = getattr(request.app.state, "explainer_bundle", None)
+    bundle = getattr(request.app.state, "bundle", None)
     return {
         "status": "ok" if bundle is not None else "degraded",
         "model_loaded": bundle is not None,

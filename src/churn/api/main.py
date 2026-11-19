@@ -1,8 +1,14 @@
-"""Minimal FastAPI application hosting the explainability router.
+"""FastAPI application: prediction, explainability, metrics and model info.
 
-This module exists so the explainability work is *runnable and verifiable now*.
-The complete serving API (predict, batch predict, metrics, model info, database
-persistence) is a later phase; it will mount the same router.
+Routers
+-------
+``prediction``      /predict, /predict/batch
+``explainability``  /explain, /explain/batch, /model/explainability
+``meta``            /metrics, /model/info
+``ops``             /health
+
+One artifact is loaded at startup and shared by every router through
+``app.state.bundle``, so prediction and explanation can never diverge.
 
 Run locally:
     uvicorn churn.api.main:app --host 0.0.0.0 --port 8000
@@ -13,14 +19,17 @@ outside a container, which is a common and confusing deployment failure.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from churn.api.explainability import build_bundle, router
+from churn.api import explainability, meta, prediction
+from churn.api.inference import ServingBundle
+from churn.api.observability import METRICS
 from churn.config import get_settings
 from churn.logging_utils import configure_logging, get_logger
 
@@ -29,12 +38,21 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Load the model and build the explainer exactly once, before serving."""
-    configure_logging(get_settings().log_level)
-    app.state.explainer_bundle = build_bundle()
-    logger.info("application startup complete")
+    """Load the served artifact exactly once, before accepting traffic.
+
+    The SHAP explainer is *not* built here: it is deferred until the first
+    explanation request, because constructing it imports shap (~95 MB RSS) and
+    prediction-only traffic should never pay that cost on a 512 MB tier.
+    """
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    app.state.bundle = ServingBundle.load(settings.resolve(settings.api.serving_model_dir))
+    logger.info(
+        "application startup complete",
+        extra={"model_version": app.state.bundle.model_version},
+    )
     yield
-    app.state.explainer_bundle = None
+    app.state.bundle = None
     logger.info("application shutdown complete")
 
 
@@ -42,10 +60,14 @@ def create_app() -> FastAPI:
     """Application factory (used by tests and by uvicorn)."""
     settings = get_settings()
     application = FastAPI(
-        title="Churn Retention Intelligence — Explainability API",
-        version="0.4.0",
+        title="Churn Retention Intelligence API",
+        version="0.8.0",
         description=(
-            "Deterministic SHAP explanations for the calibrated churn model. "
+            "Calibrated churn prediction with deterministic SHAP explanations.\n\n"
+            "* `/predict`, `/predict/batch` — probability, class and risk band\n"
+            "* `/explain`, `/explain/batch` — SHAP explanations\n"
+            "* `/model/info` — model card and frozen ML evaluation metrics\n"
+            "* `/metrics` — operational metrics (not model quality)\n\n"
             "SHAP describes model behaviour, not causation."
         ),
         lifespan=lifespan,
@@ -62,14 +84,45 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    application.include_router(router)
+    @application.middleware("http")
+    async def record_timing(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Time every request and record it as an operational metric.
+
+        Implemented as middleware rather than per-handler so that 4xx/5xx
+        responses — the ones most worth counting — are not silently excluded.
+        """
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            METRICS.record_request(request.url.path, time.perf_counter() - started, 500)
+            raise
+        METRICS.record_request(
+            request.url.path, time.perf_counter() - started, response.status_code
+        )
+        return response
+
+    application.include_router(prediction.router)
+    application.include_router(explainability.router)
+    application.include_router(meta.router)
 
     @application.get("/", include_in_schema=False)
     def root() -> dict[str, Any]:
         return {
             "service": "churn-explainability-api",
             "docs": "/docs",
-            "endpoints": ["/health", "/explain", "/explain/batch", "/model/explainability"],
+            "endpoints": [
+                "/health",
+                "/predict",
+                "/predict/batch",
+                "/explain",
+                "/explain/batch",
+                "/model/explainability",
+                "/model/info",
+                "/metrics",
+            ],
         }
 
     return application

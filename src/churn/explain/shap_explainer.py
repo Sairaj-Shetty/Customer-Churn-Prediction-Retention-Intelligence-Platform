@@ -46,6 +46,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from churn.constants import RiskBand, risk_band_from_probability
 from churn.explain.feature_mapping import FeatureMapping, build_feature_mapping
 from churn.logging_utils import get_logger
 
@@ -490,12 +491,11 @@ def build_human_readable_summary(
     causal claims.
     """
     probability = explanation.churn_probability
-    if probability >= 0.60:
-        level = "high"
-    elif probability >= 0.30:
-        level = "moderate"
-    else:
-        level = "low"
+    # Derive the wording from the single source of truth rather than repeating
+    # 0.30/0.60 here. Duplicating the bounds meant the prose could disagree with
+    # the API's risk_band for the same probability after any threshold change.
+    band = risk_band_from_probability(probability)
+    level = {RiskBand.HIGH: "high", RiskBand.MEDIUM: "moderate", RiskBand.LOW: "low"}[band]
 
     def phrase(contribution: FeatureContribution) -> str:
         label = FEATURE_PHRASES.get(contribution.feature, contribution.feature)

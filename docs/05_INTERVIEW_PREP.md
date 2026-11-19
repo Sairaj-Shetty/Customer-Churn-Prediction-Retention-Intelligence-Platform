@@ -1,6 +1,6 @@
 # Interview preparation — calibration and explainability
 
-Covers Phases 0–4 only. Nothing here describes a feature that does not exist in
+Covers Phases 0–4 and 8. Nothing here describes a feature that does not exist in
 the repository. Numbers come from `reports/phase4_calibration.json` and
 `reports/phase4_shap.json`.
 
@@ -211,6 +211,64 @@ if the population shifts — say a pricing change alters the tenure mix — the 
 threshold moves. That is the argument for drift monitoring on the *input*
 distribution, not just on model metrics, which lag by months for churn.
 
+### API engineering
+
+**Q: Why did you separate `/metrics` from `/model/info`?**
+They answer different questions with different lifetimes. Operational metrics —
+latency, error rate, request counts — describe the service and reset on restart.
+Model metrics — PR-AUC, Brier, recall — describe the model and are fixed at
+training time. A dashboard that puts "requests served" next to "PR-AUC" invites
+someone to quote traffic volume as evidence of quality. I serve them from separate
+data structures behind separate endpoints, and a test asserts the two payloads
+share no keys and that `/model/info` is unchanged by serving traffic.
+
+**Q: Why not Prometheus?**
+It is not a dependency, and adding one to serve four counters on a 512 MB free
+tier is not justified. I wrote a bounded in-process registry instead: latencies as
+an online mean/min/max rather than an unbounded list, and capped endpoint and field
+keys so a client probing random paths cannot grow memory without limit. The
+trade-off is explicit — the numbers are per-process and reset on restart, which
+with a single worker is the complete truth.
+
+**Q: How do you guarantee `/predict` and `/explain` agree?**
+They share one `ServingBundle` built at startup, and both call the same `score()`
+method. Previously the explainer derived its own class from a threshold — a
+parallel implementation that would drift the moment one changed. Now a test posts
+the same customer to both endpoints and asserts the probability, class and
+threshold match exactly.
+
+**Q: Why is your decision threshold below your lowest risk band?**
+Because they answer different questions. The threshold is a cost-optimised action
+trigger — with a missed churner at ₹500 and a wasted offer at ₹50, it is pushed
+down to 0.21 to favour recall. The risk band is a fixed presentation tier
+(Low < 0.30). So 70% of flagged customers are Low or Medium risk. That looks
+contradictory until you realise a customer can be low risk yet still worth
+contacting given the asymmetry. Rather than hide it, every response carries a
+`decision_basis` block with the threshold, its provenance and a plain-language
+explanation — and a test pins the divergence so nobody "fixes" it by quietly
+moving the threshold, which would discard the cost optimisation and invalidate the
+one-shot test evaluation.
+
+**Q: How do you stop a client from re-tuning the threshold?**
+The threshold is read from the artifact metadata at startup and the request schema
+uses `extra="forbid"`, so `{"threshold": 0.99}` is a 422. There is no code path
+that accepts a threshold from a request; `ModelArtifact.predict()` reads it from
+metadata.
+
+**Q: What does strict input validation buy you here?**
+It prevents silent wrong answers. The encoder uses `handle_unknown="ignore"`, so
+`gender="Unknown"` becomes an all-zero one-hot row and the model returns a
+*confident* prediction — a frontend typo produces a plausible-looking number with
+no error. Declaring levels as schema literals makes that a 422. I keep
+`TotalCharges` permissive because the real dataset has blanks and imputing them is
+correct. A test asserts predict and explain accept exactly the same payload.
+
+**Q: How did you verify single and batch are consistent?**
+By asserting equality, not by reading the code: post one customer to `/predict`,
+post the same customer in a one-element batch, compare the full JSON. Also tested
+ordering with a two-customer batch where the risk ordering is known, so a
+sorting bug would flip the assertion.
+
 ---
 
 ## Part 3 — Resume bullets
@@ -235,12 +293,18 @@ Only genuinely completed work. Every number is from an actual run.
 > - Implemented SHAP explainability that aggregates 46 one-hot columns back to 19
 >   parent features, with per-prediction explanations verified additive to 1e-15 and
 >   an explicit raw-score-vs-calibrated-probability contract.
-> - Served explanations via FastAPI (`/explain`, `/explain/batch`,
->   `/model/explainability`) with strict schema validation, a single startup-loaded
->   explainer and lazy SHAP import to fit a 512 MB free-tier limit (measured peak
->   **362.7 MB**); built a Streamlit dashboard that consumes the API only.
+> - Built the serving API — `/predict`, `/predict/batch`, `/explain`,
+>   `/explain/batch`, `/model/info`, `/metrics` — around a single startup-loaded
+>   artifact so prediction and explanation cannot diverge, with lazy SHAP import to
+>   fit a 512 MB free-tier limit (measured peak **362.7 MB**) and strict schema
+>   validation that turns an unknown category into a 422 instead of a silently
+>   confident prediction.
+> - Separated operational metrics (latency, error rate) from frozen ML evaluation
+>   metrics (PR-AUC, Brier) into distinct endpoints with a bounded in-process
+>   registry — avoiding a new dependency on a 512 MB tier — and documented the
+>   per-process trade-off.
 > - Enforced leakage safety with a hash-verified freeze record, a static test
->   banning test-set access outside the evaluation module, and **297 automated
+>   banning test-set access outside the evaluation module, and **383 automated
 >   tests**.
 
 ### What **not** to claim
@@ -249,7 +313,8 @@ Do not say any of these — none is true yet:
 
 - ❌ "Deployed on AWS / ECS / Fargate" — deliberately out of budget, not deployed.
 - ❌ "Live at <URL>" — the app runs locally; public hosting needs the maintainer's accounts.
-- ❌ "PostgreSQL persistence in production" — the schema is not built yet.
+- ❌ "Stores predictions in PostgreSQL" — returning a prediction is not
+  persisting it; there is no database yet (Phase 9).
 - ❌ "Evidently drift monitoring" — not implemented.
 - ❌ "CI/CD pipeline running" — no workflow file yet.
 - ❌ "Calibration improved model accuracy/detection" — it did not; it improved
