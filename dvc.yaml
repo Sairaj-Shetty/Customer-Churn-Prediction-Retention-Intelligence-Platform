@@ -1,0 +1,32 @@
+# DVC pipeline — reproducible stages from raw bytes to evaluated model.
+#
+# Every stage declares its exact inputs and outputs, so `dvc repro` re-executes
+# only what changed and `dvc dag` shows the lineage. Combined with the SHA-256
+# check in churn.data.ingest, any committed .dvc file maps to model artifacts
+# that provably came from the canonical dataset.
+
+stages:
+  ingest:
+    desc: Download and SHA-256-verify the raw IBM Telco dataset.
+    cmd: .venv/bin/python -m churn.data.ingest
+    deps:
+      - src/churn/data/ingest.py
+      - src/churn/constants.py
+    outs:
+      - data/raw/Telco-Customer-Churn.csv:
+          cache: true
+    metrics:
+      - data/raw/dataset.meta.json:
+          cache: false
+
+  eda:
+    desc: Compute statistics and render the EDA report and figures.
+    cmd: .venv/bin/python -m churn.data.eda
+    deps:
+      - src/churn/data/eda.py
+      - data/raw/Telco-Customer-Churn.csv
+    outs:
+      - reports/eda_report.md:
+          cache: false
+      - reports/figures:
+          cache: false

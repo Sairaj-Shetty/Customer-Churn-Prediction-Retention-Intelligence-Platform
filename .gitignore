@@ -1,0 +1,63 @@
+# ---------------- Python ----------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---------------- Data (tracked by DVC, NOT git) ----------------
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# ---------------- Model artifacts ----------------
+artifacts/
+models/
+*.pkl
+*.joblib
+
+# ---------------- MLflow ----------------
+mlruns/
+mlartifacts/
+mlflow.db
+
+# ---------------- Secrets / env ----------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------------- Reports (generated) ----------------
+reports/figures/*.png
+reports/*.html
+reports/drift/
+!reports/.gitkeep
+
+# ---------------- OS / editors ----------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---------------- Jupyter ----------------
+.ipynb_checkpoints/
+
+# ---------------- DVC internal ----------------
+.dvc/tmp/
+.dvc/cache/
