@@ -38,6 +38,15 @@ models/
 *.joblib
 !artifacts/model_calibrated/pipeline.joblib
 
+# ---------------- Local databases ----------------
+# SQLite files created by running the API locally. Never committed.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+!mlflow.db.example
+predictions.db
+
 # ---------------- MLflow ----------------
 mlruns/
 mlartifacts/

@@ -2,8 +2,13 @@
 #
 # Deliberately NOT included: a Render Postgres. Render's free database expires
 # 30 days after creation and is deleted 14 days later, so it cannot hold
-# prediction records. Use Neon's free tier instead and set CHURN_DATABASE__URL
-# manually in the Render dashboard.
+# prediction records. Use Neon's free tier instead and set DATABASE_URL (or
+# CHURN_DATABASE__URL) manually in the Render dashboard.
+#
+# IMPORTANT — healthCheckPath MUST stay /health (liveness), never /ready.
+# Neon suspends compute after ~5 minutes idle. A readiness probe bound to the
+# database would report failure every time the compute suspends, and Render would
+# restart the container in a loop that cannot possibly fix a sleeping database.
 #
 # Free-tier constraints this file respects:
 #   * 512 MB RAM      -> single worker (measured peak with SHAP: 362.7 MB)
@@ -17,7 +22,7 @@ services:
     plan: free
     region: oregon
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
+    healthCheckPath: /health   # liveness only — see the note above
     autoDeploy: true
     envVars:
       # Artifact is committed to the repo, so no object store is needed.
@@ -25,10 +30,17 @@ services:
         value: artifacts/model_calibrated
       - key: CHURN_LOG_LEVEL
         value: INFO
-      # Set this in the Render dashboard to the Neon pooled connection string.
-      # sync: false means "do not store a value in git".
+      # Set this in the Render dashboard to the Neon **pooled** connection
+      # string. `sync: false` means "do not store a value in git".
+      # Render also injects a bare DATABASE_URL automatically if you attach a
+      # Render database — the app accepts either, preferring CHURN_DATABASE__URL.
       - key: CHURN_DATABASE__URL
         sync: false
+      # Migrations are a deploy step, not a start-up step: the app never creates
+      # tables. Run them once per deploy:
+      #   alembic upgrade head
+      - key: CHURN_DATABASE__PERSIST_PREDICTIONS
+        value: "true"
       # Add the deployed Streamlit origin here once the frontend exists.
       - key: CHURN_API__CORS_ORIGINS
         sync: false

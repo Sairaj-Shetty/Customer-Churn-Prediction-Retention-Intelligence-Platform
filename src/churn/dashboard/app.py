@@ -277,6 +277,14 @@ def render_explanation(
         "contributions are additive in that number, not in the probability above."
     )
 
+    # Show the audit id and durability honestly: best-effort is not guaranteed.
+    persistence = prediction.get("persistence") or {}
+    st.caption(
+        f"Audit id `{prediction.get('prediction_id', '—')}` · "
+        f"persistence: **{persistence.get('mode', 'unknown')}**"
+        + ("" if persistence.get("guaranteed") else " (not guaranteed)")
+    )
+
     with st.expander("All feature contributions"):
         table = pd.DataFrame(payload["contributions"])[
             ["feature", "value", "contribution", "direction"]

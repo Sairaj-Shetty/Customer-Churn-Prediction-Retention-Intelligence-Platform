@@ -24,7 +24,10 @@ class TestHealth:
     def test_health_ok(self, client):
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "model_loaded": True}
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["model_loaded"] is True
+        assert payload["version"].startswith("phase4-calibrated-")
 
 
 class TestExplainOne:

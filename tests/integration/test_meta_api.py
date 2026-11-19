@@ -209,7 +209,9 @@ class TestSeparationOfConcerns:
 # --------------------------------------------------------------------------- #
 class TestHealthAndDocs:
     def test_health_reports_loaded(self, client):
-        assert client.get("/health").json() == {"status": "ok", "model_loaded": True}
+        payload = client.get("/health").json()
+        assert payload["status"] == "ok"
+        assert payload["model_loaded"] is True
 
     def test_all_phase8_endpoints_documented(self, client):
         paths = set(client.get("/openapi.json").json()["paths"])

@@ -1,6 +1,6 @@
 # Interview preparation — calibration and explainability
 
-Covers Phases 0–4 and 8. Nothing here describes a feature that does not exist in
+Covers Phases 0–4, 8 and 9. Nothing here describes a feature that does not exist in
 the repository. Numbers come from `reports/phase4_calibration.json` and
 `reports/phase4_shap.json`.
 
@@ -269,6 +269,93 @@ post the same customer in a one-element batch, compare the full JSON. Also teste
 ordering with a two-customer batch where the risk ordering is known, so a
 sorting bug would flip the assertion.
 
+### Database and persistence
+
+**Q: You return the prediction before writing it. How do you know it was saved?**
+I don't, and the API says so. The write is a FastAPI background task that runs
+after the response is sent, so a caller cannot know when or whether it landed —
+which is why every response carries `persistence.guaranteed: false` with a note.
+The alternative, writing synchronously, couples prediction availability to
+Neon's, and Neon suspends after five minutes idle. For an audit trail nothing
+reads in the request path, that trade is wrong. If durability mattered I would use
+a transactional outbox or an external queue, not in-process tasks.
+
+**Q: What exactly happens to pending writes when the process stops?**
+They are lost. In-process background tasks are not a broker: there is no disk
+queue, no acknowledgement, no redelivery. A deploy, a crash, an OOM kill or
+Render's 15-minute suspend discards whatever is queued. I state that in the README
+rather than implying at-least-once, because a caller has no way to detect the loss
+otherwise.
+
+**Q: How is idempotency enforced?**
+By a **partial unique index** on `idempotency_key` where it is not null. Not by a
+`SELECT`-then-`INSERT`: two concurrent retries can both see "no row" and both
+insert, so a read-then-write is racy. The database constraint cannot be raced. On
+violation, `IntegrityError` is recognised as a duplicate and treated as success —
+a duplicate is not an error.
+
+**Q: Why isn't `customer_id` the idempotency key?**
+Because a customer legitimately has many predictions over time. Using it as a key
+would make the first prediction permanently block every later one, destroying the
+history the table exists to record. It is indexed for lookups, not constrained.
+
+**Q: How does batch idempotency work?**
+A batch-level key expands to `"<key>:<index>"` per record. Retrying the same batch
+in the same order inserts nothing new; each record dedupes independently. The
+subtle part is that **ordering is part of the batch identity** — a reordered retry
+maps key `:0` to a different customer, so the first write wins and the retry is
+suppressed. I chose per-record keys over one batch row because a partial failure
+(7 of 10 written) would otherwise mark the batch complete and lose the missing 3
+forever. A subset retry dedupes the indices it covers but cannot recover rows that
+were never written.
+
+**Q: How did you prove predictions survive a database outage?**
+By pointing the app at a database path that cannot be opened and asserting the
+whole surface: `/predict` and `/predict/batch` return 200 with valid predictions,
+`/health` stays 200, `/ready` returns 503 with `database.ok=false`, and `/metrics`
+reports `failure_rate: 1.0` with a retry recorded. That test is the requirement,
+so it is automated rather than manual.
+
+**Q: Why separate `/health` from `/ready`?**
+Liveness answers "should the platform restart me?" — model loaded, nothing else.
+Readiness answers "can I do my whole job?" — model plus `SELECT 1`. They must be
+different because Neon sleeps after five minutes idle: a database-bound liveness
+probe would fail on every idle period and restart the container in a loop that
+cannot possibly fix a sleeping database. `render.yaml` is pinned to `/health` and a
+test enforces it. `prediction_available` stays true on a degraded `/ready`,
+because it honestly still is.
+
+**Q: Why a 2-connection pool?**
+Neon's free tier bills in CU-hours and suspends after ~5 minutes idle. A large
+warm pool either keeps compute awake, burning the monthly budget, or fills with
+sockets the server already dropped. With best-effort writes, waiting briefly in a
+small pool queue is strictly better than either. `pool_recycle=300` stays inside
+the suspend window and `pool_pre_ping` discards dead connections before use —
+together those are what make scale-to-zero survivable.
+
+**Q: Why did you need `with_variant(Integer, "sqlite")` on the primary key?**
+Because SQLite only auto-assigns a primary key when the declared type is exactly
+`INTEGER` — the rowid alias. I declared `BIGINT PRIMARY KEY` to get `BIGSERIAL` on
+PostgreSQL, which silently made SQLite require an explicit value and broke every
+insert. `with_variant` gives `BIGSERIAL` on PostgreSQL and `INTEGER` on SQLite
+from the same logical column. It was caught by running the repository against a
+migrated database rather than by reading the DDL.
+
+**Q: Why keep features out of the database if you will need drift later?**
+Because they are different problems. An audit log answers "what did we decide and
+when"; drift answers "has the input distribution moved". Merging them makes a PII
+store with no retention policy and an unclear lifecycle. Phase 10 uses the split
+files as the baseline and a separate production-observation artifact for the live
+distribution. Worth being precise about: the split files are the *baseline*, not
+the production distribution — drift needs live feature observations, which is a
+deliberate design item, not an accident of this schema.
+
+**Q: What would you change at 100x the traffic?**
+Move persistence out of process — a queue plus a consumer, so writes survive
+restarts and can be retried with real backoff. I would also add partitioning or
+retention on `created_at`, since this table only grows. At that point
+`prometheus-client` and a real metrics backend become justified too.
+
 ---
 
 ## Part 3 — Resume bullets
@@ -303,8 +390,13 @@ Only genuinely completed work. Every number is from an actual run.
 >   metrics (PR-AUC, Brier) into distinct endpoints with a bounded in-process
 >   registry — avoiding a new dependency on a 512 MB tier — and documented the
 >   per-process trade-off.
+> - Added PostgreSQL persistence for prediction auditing with Alembic-owned
+>   migrations (no `create_all`), enforcing idempotency through a **partial unique
+>   index** rather than a racy read-then-write, and keeping predictions available
+>   through a complete database outage via bounded-retry background writes with
+>   `persistence.guaranteed: false` stated in every response.
 > - Enforced leakage safety with a hash-verified freeze record, a static test
->   banning test-set access outside the evaluation module, and **383 automated
+>   banning test-set access outside the evaluation module, and **445 automated
 >   tests**.
 
 ### What **not** to claim
@@ -313,8 +405,13 @@ Do not say any of these — none is true yet:
 
 - ❌ "Deployed on AWS / ECS / Fargate" — deliberately out of budget, not deployed.
 - ❌ "Live at <URL>" — the app runs locally; public hosting needs the maintainer's accounts.
-- ❌ "Stores predictions in PostgreSQL" — returning a prediction is not
-  persisting it; there is no database yet (Phase 9).
+- ❌ "Guarantees predictions are stored" — writes are best-effort background
+  tasks and pending writes are lost on restart. The honest claim is "audits
+  predictions in PostgreSQL on a best-effort basis".
+- ❌ "Verified against a live Neon instance" — the Neon path is config-complete
+  and offline-verified; live TLS/scale-to-zero behaviour still needs a real project.
+- ❌ "Stores customer features for drift analysis" — deliberately not; the table
+  is an audit log.
 - ❌ "Evidently drift monitoring" — not implemented.
 - ❌ "CI/CD pipeline running" — no workflow file yet.
 - ❌ "Calibration improved model accuracy/detection" — it did not; it improved

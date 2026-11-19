@@ -5,7 +5,7 @@ Routers
 ``prediction``      /predict, /predict/batch
 ``explainability``  /explain, /explain/batch, /model/explainability
 ``meta``            /metrics, /model/info
-``ops``             /health
+``readiness``       /health, /ready
 
 One artifact is loaded at startup and shared by every router through
 ``app.state.bundle``, so prediction and explanation can never diverge.
@@ -27,10 +27,11 @@ from typing import Any
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from churn.api import explainability, meta, prediction
+from churn.api import explainability, meta, prediction, readiness
 from churn.api.inference import ServingBundle
 from churn.api.observability import METRICS
 from churn.config import get_settings
+from churn.db.session import dispose_engine
 from churn.logging_utils import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     app.state.bundle = None
+    # Close pooled connections so Neon is not left holding sockets from a
+    # process that no longer exists.
+    dispose_engine()
     logger.info("application shutdown complete")
 
 
@@ -107,6 +111,9 @@ def create_app() -> FastAPI:
     application.include_router(prediction.router)
     application.include_router(explainability.router)
     application.include_router(meta.router)
+    # /health and /ready live here; the old /health in the explainability router
+    # is removed to avoid two endpoints claiming the same liveness semantics.
+    application.include_router(readiness.router)
 
     @application.get("/", include_in_schema=False)
     def root() -> dict[str, Any]:

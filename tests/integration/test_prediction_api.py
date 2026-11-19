@@ -182,10 +182,25 @@ class TestPredictBatch:
         assert payload["elapsed_ms"] >= 0
 
     def test_single_equals_batch(self, client, valid_customer):
-        """The two endpoints must agree exactly, field for field."""
+        """The two endpoints must agree on the prediction, field for field.
+
+        ``prediction_id`` is compared separately: it is a fresh UUID per request
+        (each call is a distinct audit record), so it is expected to differ while
+        the actual prediction does not.
+        """
         single = client.post("/predict", json=valid_customer).json()
         batch = client.post("/predict/batch", json={"customers": [valid_customer]}).json()
-        assert batch["predictions"][0] == single
+        batched = batch["predictions"][0]
+
+        assert batched["prediction_id"] != single["prediction_id"]
+        assert batched["churn_probability"] == single["churn_probability"]
+        assert batched["predicted_class"] == single["predicted_class"]
+        assert batched["risk_band"] == single["risk_band"]
+        assert batched["model_version"] == single["model_version"]
+        assert batched["decision_basis"] == single["decision_basis"]
+
+        stripped = {k: v for k, v in batched.items() if k != "prediction_id"}
+        assert stripped == {k: v for k, v in single.items() if k != "prediction_id"}
 
     def test_order_is_preserved(self, client, valid_customer):
         """predictions[i] must correspond to customers[i]."""
@@ -217,8 +232,13 @@ class TestPredictBatch:
         batch = client.post("/predict/batch", json={"customers": [high_risk, low_risk]}).json()[
             "predictions"
         ]
-        assert batch[0] == client.post("/predict", json=high_risk).json()
-        assert batch[1] == client.post("/predict", json=low_risk).json()
+
+        def comparable(payload: dict) -> dict:
+            """Everything except the per-request audit UUID."""
+            return {k: v for k, v in payload.items() if k != "prediction_id"}
+
+        assert comparable(batch[0]) == comparable(client.post("/predict", json=high_risk).json())
+        assert comparable(batch[1]) == comparable(client.post("/predict", json=low_risk).json())
 
     def test_empty_batch_rejected(self, client):
         assert client.post("/predict/batch", json={"customers": []}).status_code == 422
@@ -282,10 +302,13 @@ class TestInputValidation:
 
 
 class TestDeterminism:
-    def test_repeated_calls_are_identical(self, client, valid_customer):
+    def test_repeated_calls_produce_identical_predictions(self, client, valid_customer):
+        """Scoring is deterministic; only the per-request UUID changes."""
         first = client.post("/predict", json=valid_customer).json()
         second = client.post("/predict", json=valid_customer).json()
-        assert first == second
+        assert first["prediction_id"] != second["prediction_id"]
+        for key in ("churn_probability", "predicted_class", "risk_band", "decision_basis"):
+            assert first[key] == second[key]
 
 
 class TestPredictExplainConsistency:

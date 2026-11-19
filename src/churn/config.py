@@ -114,18 +114,97 @@ class APIConfig(BaseModel):
 
 
 class DatabaseSettings(BaseModel):
-    """Database configuration. Defaults to SQLite so the project runs with no
-    infrastructure; set ``CHURN_DATABASE__URL`` for PostgreSQL in Docker/ECS.
+    """Database configuration.
+
+    Defaults to SQLite so the project runs with no infrastructure; point
+    ``DATABASE_URL`` (or ``CHURN_DATABASE__URL``) at Neon for deployment.
+
+    Pool sizing is deliberately small. Neon's free tier bills in **CU-hours** and
+    suspends the compute after ~5 minutes idle, so a large idle pool either burns
+    the monthly budget keeping it awake or fills with connections the server has
+    already dropped. With best-effort writes, a briefly queued insert is strictly
+    preferable to a warm pool.
     """
 
+    #: SQLAlchemy URL. ``DATABASE_URL`` is accepted as a fallback for platforms
+    #: (Render, Railway, Heroku) that inject that variable name by convention.
     url: str = "sqlite:///./predictions.db"
     echo: bool = False
-    pool_size: int = 5
+
+    #: Persistent connections to keep open.
+    pool_size: int = 2
+    #: Extra connections allowed above ``pool_size`` under burst load.
+    max_overflow: int = 2
+    #: Recycle connections after this many seconds. Must be **below** Neon's
+    #: idle-suspend window (~300 s) so a suspended-then-resumed compute never
+    #: hands out a dead socket.
+    pool_recycle: int = 300
+    #: Seconds to wait for a free connection before raising ``TimeoutError``.
+    pool_timeout: int = 5
+    #: Socket-level connect timeout (psycopg2 ``connect_timeout``).
+    connect_timeout: int = 5
+    #: Verify the connection is alive before handing it out. This is what makes
+    #: Neon scale-to-zero survivable.
     pool_pre_ping: bool = True
+    #: psycopg2 ``sslmode``. Neon requires TLS; ignored for SQLite.
+    sslmode: str = "require"
+
+    # --- Best-effort persistence behaviour -------------------------------- #
+    #: Master switch. ``false`` serves predictions with no database writes.
+    persist_predictions: bool = True
+    #: How many times to retry a failed write before giving up (0 = no retry).
+    retry_attempts: int = 1
+    #: Base delay between retries, multiplied by the attempt index.
+    retry_backoff_seconds: float = 0.25
+
+    #: Timeout for the readiness probe's ``SELECT 1``.
+    readiness_timeout_seconds: int = 2
 
     @property
     def is_sqlite(self) -> bool:
         return self.url.startswith("sqlite")
+
+    @property
+    def is_postgres(self) -> bool:
+        return self.url.startswith(("postgresql", "postgres"))
+
+    @property
+    def redacted_url(self) -> str:
+        """URL with any password replaced, safe to log or return in a response.
+
+        A DSN like ``postgresql://user:secret@host/db`` must never reach a log
+        line or an HTTP response. Anything that cannot be parsed is replaced
+        wholesale rather than risk leaking a credential.
+        """
+        try:
+            from sqlalchemy.engine import make_url
+
+            return make_url(self.url).render_as_string(hide_password=True)
+        except Exception:  # noqa: BLE001 - malformed URL must not leak either
+            return "<unparseable database url>"
+
+    def engine_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for :func:`sqlalchemy.create_engine`.
+
+        SQLite gets no pool tuning: it uses a ``NullPool``-like strategy and
+        rejects ``pool_size``, so passing PostgreSQL options would raise.
+        """
+        if self.is_sqlite:
+            return {"echo": self.echo}
+
+        connect_args: dict[str, Any] = {"connect_timeout": self.connect_timeout}
+        if self.is_postgres:
+            connect_args["sslmode"] = self.sslmode
+
+        return {
+            "echo": self.echo,
+            "pool_size": self.pool_size,
+            "max_overflow": self.max_overflow,
+            "pool_recycle": self.pool_recycle,
+            "pool_timeout": self.pool_timeout,
+            "pool_pre_ping": self.pool_pre_ping,
+            "connect_args": connect_args,
+        }
 
 
 class Settings(BaseModel):
@@ -155,6 +234,13 @@ class Settings(BaseModel):
         env_file = PROJECT_ROOT / ".env"
         if env_file.exists():
             layers.append(_nest(dotenv_values(env_file)))
+
+        # Platforms such as Render and Railway inject ``DATABASE_URL`` without a
+        # prefix. It is merged BEFORE the prefixed layer so that an explicit
+        # ``CHURN_DATABASE__URL`` still wins — the fallback must not override a
+        # deliberate setting.
+        if bare_database_url := _bare_database_url():
+            layers.append({"database": {"url": bare_database_url}})
 
         layers.append(_nest(_prefixed_environ()))
 
@@ -190,6 +276,14 @@ def _prefixed_environ() -> dict[str, str]:
         for key, value in os.environ.items()
         if key.startswith(ENV_PREFIX)
     }
+
+
+def _bare_database_url() -> str | None:
+    """Return an unprefixed ``DATABASE_URL``, if one is set and not overridden.
+
+    ``CHURN_DATABASE__URL`` keeps priority: it is merged later and so wins.
+    """
+    return os.environ.get("DATABASE_URL") or None
 
 
 def _nest(flat: dict[str, Any]) -> dict[str, Any]:

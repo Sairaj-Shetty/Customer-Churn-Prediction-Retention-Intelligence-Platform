@@ -1,12 +1,13 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–4 and 8 complete.** Data pipeline, preprocessing, multi-model
+> **Status: Phases 0–4, 8 and 9 complete.** Data pipeline, preprocessing, multi-model
 > training with Optuna/RandomizedSearch tuning, MLflow tracking + registry,
 > leakage-proof model selection, probability calibration, SHAP explainability and
 > the full serving API (`/predict`, `/predict/batch`, `/explain`, `/explain/batch`,
-> `/model/info`, `/model/explainability`, `/metrics`, `/health`) are implemented
-> and tested (**383 tests**). Database persistence, drift monitoring and public
-> deployment follow — see the [roadmap](#roadmap).
+> `/model/info`, `/model/explainability`, `/metrics`, `/health`, `/ready`) and
+> best-effort PostgreSQL persistence with Alembic migrations are implemented and
+> tested (**445 tests**). Drift monitoring and public deployment follow — see the
+> [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
 ingest → validate → engineer features → train and compare multiple models →
@@ -102,19 +103,35 @@ by tests rather than glossed over.
                                                         (global + local)
                                                         │
                     ONLINE / SERVING PLANE              │
- Streamlit dashboard ──► FastAPI (model loaded ONCE at startup) ◄──┘
-      (no ML logic)            │
-                               ├── GET  /health
-                               ├── GET  /model/info
-                               ├── POST /predict
-                               ├── POST /predict/batch
-                               ├── POST /explain
-                               └── GET  /metrics
+ Streamlit dashboard ──► FastAPI ◄────────────────────────┘
+      (no ML logic)      (calibrated artifact loaded ONCE at startup)
                                │
-                        PostgreSQL (predictions, model versions)
-                               │
-                  Evidently drift job: training vs production data
+                               ├── POST /predict        probability, class,
+                               ├── POST /predict/batch  risk band, prediction_id
+                               ├── POST /explain        SHAP (lazy import)
+                               ├── POST /explain/batch
+                               ├── GET  /model/info     model card + frozen ML metrics
+                               ├── GET  /model/explainability
+                               ├── GET  /metrics        operational counters
+                               ├── GET  /health         liveness (no DB)
+                               └── GET  /ready          readiness (model + DB)
+                                        │
+                               response returned HERE ──► client
+                                        │
+                              background task (best-effort)
+                                        │
+                                        ▼
+                        Neon PostgreSQL — predictions audit log
+                        (Alembic-migrated; NO customer features stored)
+                                        │
+                  Evidently drift job  ──► baseline: train/val/test split files
+                  (Phase 10)               live distribution: separate artifact,
+                                           NOT this table (it holds no features)
 ```
+
+**Serving path invariant:** a prediction never waits on the database. The write is
+queued after the response is sent, so a Neon outage cannot affect availability —
+verified by test with the database fully unreachable.
 
 ---
 
@@ -123,7 +140,8 @@ by tests rather than glossed over.
 ```
 ├── configs/            # config.yaml (single source of truth) + model search spaces
 ├── data/               # raw / interim / processed  (DVC-tracked, gitignored)
-├── docs/               # blueprint, data card, deployment guide
+├── docs/               # blueprint, data card, API reference, database guide
+├── migrations/         # Alembic revisions (schema lives here, not in app code)
 ├── reports/            # generated EDA report + figures
 ├── src/churn/          # installable package
 │   ├── config.py       # typed settings, env-precedence merge
@@ -232,16 +250,17 @@ make typecheck   # mypy
 Current status:
 
 ```
-383 passed
+445 passed
 ruff: All checks passed!
-mypy: Success: no issues found in 34 source files
+mypy: Success: no issues found in 41 source files
 ```
 
 Coverage includes: checksum verification and tamper rejection, download-failure
 cleanup, ingestion caching, every EDA statistic, config precedence, PII redaction
 in logs, leakage guards on the frozen selection, calibration method selection,
-SHAP additivity, one-hot grouping, and every API endpoint including validation
-rejection and cross-endpoint consistency.
+SHAP additivity, one-hot grouping, every API endpoint including validation
+rejection and cross-endpoint consistency, migration round-trips, idempotency under
+retry, and prediction availability with the database fully unreachable.
 
 ---
 
@@ -594,6 +613,88 @@ them and imputation is the correct handling.
 
 ---
 
+## Prediction persistence (Phase 9)
+
+Full detail: [`docs/07_DATABASE.md`](docs/07_DATABASE.md)
+
+Predictions are audited in PostgreSQL (Neon free tier) via SQLAlchemy, with the
+schema owned by **Alembic migrations** — the application never calls `create_all`,
+and a test asserts it.
+
+```bash
+make migrate        # alembic upgrade head
+make migrate-down   # one step back
+make migration m="…"
+make db-status
+```
+
+### What is stored — and what deliberately is not
+
+Stored: `prediction_id`, optional `customer_id`, optional `idempotency_key`,
+`batch_id`, probability, predicted class, risk band, model version, decision
+threshold, timestamp.
+
+**Not stored: any customer feature.** No tenure, charges, contract, demographics.
+This is an **audit log, not a feature store** — storing feature vectors would make
+it a PII database with no retention policy. Phase 10 will use the split files as
+the drift **baseline** and a separate production-observation artifact for the live
+distribution; the two have different lifecycles and should not share a table.
+
+### Best-effort persistence — stated plainly
+
+The response is returned **before** the write. The insert runs in an in-process
+background task after the response is sent.
+
+| Claim | Reality |
+|---|---|
+| Predictions always persisted | ❌ **Pending writes are lost on process exit** |
+| Exactly-once delivery | ❌ At-most-once per key, if the write connected at all |
+| Survives a redeploy | ❌ FastAPI background tasks are in-process, not a queue |
+| Prediction depends on the DB | ❌ **Never** — verified with the database fully unreachable |
+
+Every response carries `persistence.guaranteed: false` and a note, because a
+caller that assumes durability cannot otherwise detect the loss. Closing the gap
+would need a transactional outbox or an external queue, which is out of scope.
+
+Measured with the database pointed at an unopenable path:
+
+| Endpoint | Result |
+|---|---|
+| `POST /predict` | **200**, valid prediction |
+| `POST /predict/batch` | **200**, all rows |
+| `GET /health` | **200** (liveness unaffected) |
+| `GET /ready` | **503** `{"database":{"ok":false,"detail":"OperationalError"}}` |
+| `GET /metrics` | `failure_rate: 1.0`, `retries: 1` |
+
+### Idempotency
+
+Enforced by a **partial unique index** (`WHERE idempotency_key IS NOT NULL`), not a
+`SELECT`-then-`INSERT` check — a read-then-write is racy under concurrent retries.
+
+`customer_id` is indexed but **not** unique: one customer legitimately has many
+predictions, so it is never used as an idempotency key.
+
+For batches, a batch-level key expands to `"<key>:<index>"` per record:
+
+| Scenario | Rows |
+|---|---|
+| Retry, same key, same order | 0 new (all deduplicated) |
+| Retry, same key, **reordered** | First write wins — ordering is part of batch identity |
+| Retry a subset, same indices | Subset deduplicated; missing rows are not recovered |
+
+### Neon scale-to-zero
+
+Neon suspends compute after ~5 minutes idle and bills in CU-hours. The pool is
+deliberately **2 + 2**: a large idle pool either keeps compute awake or holds
+sockets the server already dropped. `pool_recycle=300` stays inside the suspend
+window and `pool_pre_ping` discards dead connections before use.
+
+**The platform probe uses `/health`, never `/ready`.** A database-bound liveness
+probe would fail on every idle period and restart the container in a loop that
+cannot fix a sleeping database. `render.yaml` is pinned and a test enforces it.
+
+---
+
 ## Deployment on a ₹0 budget
 
 The deployment target is **strictly free**: no paid services, no credit card, no
@@ -649,6 +750,7 @@ Two workers would exceed the limit.
 |---|---|---|
 | **AWS (S3/ECR/ECS)** | Explicitly out of budget | Render + Neon; artifacts committed to the repo instead of S3 |
 | **MLflow server** | Needs persistent storage + RAM | Local MLflow only; the registry is not part of the public deployment |
+| **Render Postgres** | Expires after 30 days | **Neon** — now wired for prediction persistence (Phase 9) |
 | **DVC remote** | Needs an object store | Local DVC; data is reproducible from the pinned SHA-256 |
 | **Render Postgres** | Expires after 30 days | Neon |
 
@@ -706,7 +808,7 @@ verified without the maintainer's accounts.
 | 3 | 4 models × weighting variants, Optuna/RandomizedSearch, threshold optimisation, MLflow tracking + registry, frozen selection | ✅ done |
 | 4 | Probability calibration (sigmoid vs isotonic), SHAP global + local explainability with one-hot grouping, explainability API, dashboard | ✅ done |
 | 8 | Full FastAPI backend: predict, batch predict, metrics, model info | ✅ done |
-| 9 | PostgreSQL persistence (Neon) | next |
+| 9 | PostgreSQL persistence: Alembic migrations, best-effort background writes, idempotency, readiness | ✅ done |
 | 10 | Evidently drift monitoring | planned |
 | 11 | Streamlit dashboard | planned |
 | 12 | Docker, CI/CD, cloud deployment, documentation | planned |

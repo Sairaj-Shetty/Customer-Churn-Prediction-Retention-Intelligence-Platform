@@ -218,13 +218,3 @@ def explainability_info(request: Request) -> ExplainabilityInfo:
         causation_disclaimer=CAUSATION_DISCLAIMER,
         global_importance=[GlobalImportanceOut(**item.to_dict()) for item in importance],
     )
-
-
-@router.get("/health", tags=["ops"], summary="Liveness probe")
-def health(request: Request) -> dict[str, Any]:
-    """Cheap liveness check — no SHAP, no heavy work (free-tier cold starts)."""
-    bundle = getattr(request.app.state, "bundle", None)
-    return {
-        "status": "ok" if bundle is not None else "degraded",
-        "model_loaded": bundle is not None,
-    }

@@ -7,7 +7,8 @@ served artifact is `phase4-calibrated-sigmoid` with a frozen threshold of **0.21
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/health` | GET | Liveness probe (cheap; no SHAP import) |
+| `/health` | GET | Liveness probe (cheap; no DB, no SHAP import) |
+| `/ready` | GET | Readiness: model **and** database, with per-component detail |
 | `/predict` | POST | Score one customer |
 | `/predict/batch` | POST | Score up to 100 customers |
 | `/explain` | POST | SHAP explanation for one customer |
@@ -37,6 +38,8 @@ rejected, so a client cannot smuggle in a `threshold`.
 | `PaymentMethod` | string | `Bank transfer (automatic)`, `Credit card (automatic)`, `Electronic check`, `Mailed check` |
 | `MonthlyCharges` | number | ≥ 0 |
 | `TotalCharges` | number \| string \| null | optional; blank/`null` is **imputed** with the frozen training median (1373.625) |
+| `customer_id` | string ≤128 | **optional** client identifier. Indexed, **not** an idempotency key |
+| `idempotency_key` | string ≤255 | **optional** unique key making a retry safe |
 
 ### Why the enums are strict
 
@@ -68,6 +71,14 @@ curl -X POST localhost:8000/predict -H 'Content-Type: application/json' -d '{
   "predicted_class": 1,
   "risk_band": "High",
   "model_version": "phase4-calibrated-sigmoid",
+  "prediction_id": "0d6e9826-8e75-4a36-8a9b-14e0ab734853",
+  "customer_id": "CUST-1042",
+  "persistence": {
+    "mode": "best_effort_async",
+    "enabled": true,
+    "guaranteed": false,
+    "note": "Written after the response was sent, in an in-process background task. …"
+  },
   "decision_basis": {
     "threshold": 0.21,
     "threshold_source": "frozen artifact metadata (selected on validation in model development; never re-tuned at serve time)",
@@ -114,6 +125,47 @@ model — but do not read it as outreach volume. Re-tune the cost matrix in
 
 ---
 
+## Persistence and idempotency
+
+Full detail: [`docs/07_DATABASE.md`](07_DATABASE.md).
+
+Predictions are returned **before** they are written. The audit row is inserted by
+an in-process background task after the response is sent.
+
+| Property | Guarantee |
+|---|---|
+| Prediction availability | **Never** depends on the database |
+| Retry on transient failure | Once, after 0.25 s |
+| Duplicate `idempotency_key` | Rejected by a DB constraint; treated as success |
+| Pending writes across a restart | **Lost** — in-process tasks are not a queue |
+| Exactly-once delivery | **Not** provided |
+
+`persistence.guaranteed` is always `false`, and the field is in the response body
+because a caller assuming durability otherwise has no way to detect the loss.
+
+### Idempotency semantics
+
+```jsonc
+// Single prediction: the key applies to the whole request.
+{"idempotency_key": "req-abc-1", "customer_id": "CUST-1", ...}
+
+// Batch: a batch-level key, expanded per record as "<key>:<index>".
+{"idempotency_key": "batch-1", "customers": [ {...}, {...} ]}
+// -> batch-1:0, batch-1:1
+```
+
+| Scenario | Rows written |
+|---|---|
+| Retry with same key, same order | 0 new (all deduplicated) |
+| Retry with same key, **reordered** | First write wins; ordering is part of batch identity |
+| Retry a subset, same indices | Subset deduplicated; missing rows are **not** recovered |
+| No key supplied | Every call inserts |
+
+`customer_id` is **never** an idempotency key — one customer has many legitimate
+predictions over time.
+
+---
+
 ## POST /predict/batch
 
 ```json
@@ -122,10 +174,12 @@ model — but do not read it as outreach volume. Re-tune the cost matrix in
 
 ```json
 {
-  "predictions": [ { "churn_probability": 0.744252, ... } ],
+  "predictions": [ { "churn_probability": 0.744252, "prediction_id": "…", ... } ],
   "count": 2,
   "model_version": "phase4-calibrated-sigmoid",
-  "elapsed_ms": 12.4
+  "elapsed_ms": 12.4,
+  "batch_id": "f090b510-6613-4b8b-bb91-30a253db840f",
+  "persistence": { "mode": "best_effort_async", "guaranteed": false, "…": "…" }
 }
 ```
 
@@ -194,7 +248,13 @@ volumes.
   },
   "predictions": {"requests": 1, "customers": 1, "churn_flagged": 1},
   "explanations": {"requests": 0, "customers": 0},
-  "validation_rejections": {"total": 0, "by_field": {}}
+  "validation_rejections": {"total": 0, "by_field": {}},
+  "persistence": {
+    "mode": "best_effort_async",
+    "attempted": 7, "succeeded": 5, "duplicates_suppressed": 2,
+    "failed": 0, "retries": 0, "failure_rate": 0.0,
+    "mean_write_ms": 3.1, "last_error_seconds_ago": null
+  }
 }
 ```
 
@@ -229,12 +289,45 @@ out.
 
 ---
 
+## GET /health and GET /ready
+
+| Endpoint | Checks | With the database down |
+|---|---|---|
+| `/health` | model loaded | **200** (liveness is unaffected) |
+| `/ready` | model **and** `SELECT 1` | **503** `degraded` |
+
+```json
+// GET /ready — degraded
+{
+  "status": "degraded",
+  "components": {
+    "model":    {"ok": true,  "detail": null},
+    "database": {"ok": false, "detail": "OperationalError"}
+  },
+  "prediction_available": true,
+  "check_cached": false
+}
+```
+
+`prediction_available` remains `true` because best-effort persistence means
+predictions genuinely still work; `degraded` states that audit writes are being
+dropped.
+
+**A platform's liveness probe must use `/health`, never `/ready`.** Neon suspends
+after ~5 minutes idle, so a database-bound probe would fail on every idle period
+and trigger a restart loop that cannot fix a sleeping database. `render.yaml` is
+pinned to `/health` and a test enforces it.
+
+Readiness results are cached for 10 s so probes do not keep Neon awake.
+
+---
+
 ## Error handling
 
 | Status | When |
 |---|---|
 | `422` | Invalid/unknown feature value, missing field, extra field, batch of 0 or >100 |
-| `503` | Model not loaded (startup failed) |
+| `503` | Model not loaded (startup failed), or `/ready` reporting a dependency down |
 | `500` | Unexpected server error (logged; operational metric incremented) |
 
 ```json
@@ -250,6 +343,6 @@ make api        # http://localhost:8000/docs
 make dashboard  # http://localhost:8501 (calls the API over HTTP)
 ```
 
-**Not yet implemented (Phase 9):** database persistence. Predictions are returned
-but not stored; there is no `/predictions` history endpoint. That arrives with the
-Neon PostgreSQL work.
+**Persistence:** implemented as best-effort background writes (Phase 9). There is
+no `/predictions` history endpoint — reading the audit trail is done with SQL, not
+the API. See [`docs/07_DATABASE.md`](07_DATABASE.md).

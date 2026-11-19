@@ -100,6 +100,18 @@ class MetricsRegistry:
         default_factory=lambda: {"requests": 0, "customers": 0}, repr=False
     )
     _validation_rejections: dict[str, int] = field(default_factory=dict, repr=False)
+    _persistence: dict[str, float] = field(
+        default_factory=lambda: {
+            "attempted": 0.0,
+            "succeeded": 0.0,
+            "duplicates": 0.0,
+            "failed": 0.0,
+            "retries": 0.0,
+            "total_seconds": 0.0,
+            "last_error_epoch": 0.0,
+        },
+        repr=False,
+    )
 
     # ------------------------------------------------------------------ #
     def record_request(self, endpoint: str, duration: float, status_code: int) -> None:
@@ -123,6 +135,28 @@ class MetricsRegistry:
             self._explanations["requests"] += 1
             self._explanations["customers"] += count
 
+    def record_persistence(
+        self,
+        *,
+        attempted: int,
+        succeeded: int,
+        duplicates: int,
+        failed: int,
+        retries: int = 0,
+        error: str | None = None,
+        duration: float = 0.0,
+    ) -> None:
+        """Record one persistence attempt (background write)."""
+        with self._lock:
+            self._persistence["attempted"] += attempted
+            self._persistence["succeeded"] += succeeded
+            self._persistence["duplicates"] += duplicates
+            self._persistence["failed"] += failed
+            self._persistence["retries"] += retries
+            self._persistence["total_seconds"] += duration
+            if error:
+                self._persistence["last_error_epoch"] = time.time()
+
     def record_validation_rejection(self, field_name: str) -> None:
         """Record a 422, keyed by the field that failed.
 
@@ -133,6 +167,24 @@ class MetricsRegistry:
             key = field_name if len(self._validation_rejections) < 50 else "__other__"
             self._validation_rejections[key] = self._validation_rejections.get(key, 0) + 1
 
+    def reset(self) -> None:
+        """Clear all counters **in place**.
+
+        Rebinding the module-level ``METRICS`` would be a trap: every module that
+        did ``from ... import METRICS`` keeps a reference to the original object,
+        so a rebinding reset is invisible to them and counters silently keep
+        accumulating across tests (and, in principle, across a reload). Mutating
+        in place means reset works no matter how the registry was imported.
+        """
+        with self._lock:
+            self.started_at = time.time()
+            self._endpoints.clear()
+            self._predictions = {"requests": 0, "customers": 0, "churn_flagged": 0}
+            self._explanations = {"requests": 0, "customers": 0}
+            self._validation_rejections.clear()
+            for key in self._persistence:
+                self._persistence[key] = 0.0
+
     def snapshot(
         self, *, model_loaded: bool, uptime_seconds: float | None = None
     ) -> dict[str, Any]:
@@ -142,6 +194,7 @@ class MetricsRegistry:
             predictions = dict(self._predictions)
             explanations = dict(self._explanations)
             rejections = dict(self._validation_rejections)
+            persistence = dict(self._persistence)
             started = self.started_at
 
         uptime = uptime_seconds if uptime_seconds is not None else time.time() - started
@@ -176,6 +229,27 @@ class MetricsRegistry:
                 "total": sum(rejections.values()),
                 "by_field": rejections,
             },
+            "persistence": {
+                "mode": "best_effort_async",
+                "attempted": int(persistence["attempted"]),
+                "succeeded": int(persistence["succeeded"]),
+                "duplicates_suppressed": int(persistence["duplicates"]),
+                "failed": int(persistence["failed"]),
+                "retries": int(persistence["retries"]),
+                "failure_rate": round(persistence["failed"] / persistence["attempted"], 4)
+                if persistence["attempted"]
+                else 0.0,
+                "mean_write_ms": round(
+                    persistence["total_seconds"] / max(persistence["attempted"], 1) * 1000, 2
+                ),
+                "last_error_seconds_ago": round(time.time() - persistence["last_error_epoch"], 1)
+                if persistence["last_error_epoch"]
+                else None,
+                "note": (
+                    "Best-effort writes issued after the response. Not guaranteed; "
+                    "pending writes are lost on process exit."
+                ),
+            },
         }
 
 
@@ -184,6 +258,9 @@ METRICS = MetricsRegistry()
 
 
 def reset_metrics() -> None:
-    """Clear all counters (test helper, and harmless in production)."""
-    global METRICS
-    METRICS = MetricsRegistry()
+    """Clear all counters (test helper, and harmless in production).
+
+    Delegates to :meth:`MetricsRegistry.reset`, which mutates the existing object
+    so that modules holding a direct reference still see the cleared state.
+    """
+    METRICS.reset()

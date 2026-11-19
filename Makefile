@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PIP ?= $(PY) -m pip
 
-.PHONY: help install data validate split train train-quick evaluate-test calibrate explain mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
+.PHONY: help install data validate split train train-quick evaluate-test calibrate explain migrate migrate-down migration db-status mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +38,18 @@ calibrate:  ## Phase 4: fit sigmoid/isotonic on train, select on validation
 
 explain:  ## Phase 4: build the SHAP report and figures
 	$(PY) -m churn.explain.build_report
+
+migrate:  ## Apply database migrations to head
+	$(PY) -m alembic upgrade head
+
+migrate-down:  ## Roll back one migration
+	$(PY) -m alembic downgrade -1
+
+migration:  ## Autogenerate a revision: make migration m="add column"
+	$(PY) -m alembic revision --autogenerate -m "$(m)"
+
+db-status:  ## Show the current migration revision
+	$(PY) -m alembic current
 
 mlflow-ui:  ## Open the MLflow tracking UI
 	$(PY) -m mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000

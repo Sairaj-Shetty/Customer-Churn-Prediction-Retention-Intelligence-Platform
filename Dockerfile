@@ -20,6 +20,12 @@ RUN pip install --upgrade pip && pip install -e ".[api]"
 COPY artifacts/model_calibrated/ ./artifacts/model_calibrated/
 COPY configs/ ./configs/
 
+# Migrations ship too, but are NOT run at container start. The app never creates
+# tables; schema changes are applied explicitly as a deploy step:
+#     docker run --rm -e DATABASE_URL=... IMAGE alembic upgrade head
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
+
 # Non-root, and bound to 0.0.0.0 so the platform proxy can reach it.
 RUN useradd --create-home appuser && chown -R appuser:appuser /app
 USER appuser

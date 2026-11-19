@@ -45,9 +45,32 @@ MAX_BATCH_ROWS = 100
 
 
 class CustomerFeatures(BaseModel):
-    """One customer's raw features, exactly as the model expects them."""
+    """One customer's raw features, exactly as the model expects them.
+
+    The two identifiers are **optional siblings** of the feature fields rather
+    than a nested object. That keeps the request body backward-compatible: a
+    client sending exactly the 19 feature fields still works unchanged.
+    """
 
     model_config = ConfigDict(extra="forbid")
+
+    #: Optional client identifier. Stored for auditing, indexed, and deliberately
+    #: **not** used for idempotency — one customer legitimately has many
+    #: predictions over time.
+    customer_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Client's own customer identifier. Not an idempotency key.",
+    )
+    #: Optional unique key making a retry safe. Enforced by a partial unique index.
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=255,
+        description=(
+            "Unique key so a retried request does not create a duplicate record. "
+            "Batch requests derive '<key>:<index>' per customer."
+        ),
+    )
 
     gender: Gender
     SeniorCitizen: str | int = Field(  # noqa: N815 - mirrors the dataset's column names
@@ -116,6 +139,21 @@ class DecisionBasis(BaseModel):
     note: str = Field(description="Plain-language explanation of any divergence.")
 
 
+class PersistenceInfo(BaseModel):
+    """Durability of the record for this prediction.
+
+    Returned in the body rather than only documented, because a caller who
+    assumes the write is guaranteed has no way to detect otherwise.
+    """
+
+    mode: str = Field(description="Always 'best_effort_async'.")
+    enabled: bool
+    guaranteed: bool = Field(
+        description="Always false: writes happen after the response and may be lost."
+    )
+    note: str
+
+
 class PredictionOut(BaseModel):
     """One customer's prediction."""
 
@@ -123,7 +161,26 @@ class PredictionOut(BaseModel):
     predicted_class: int = Field(description="1 = predicted to churn, 0 = predicted to stay.")
     risk_band: str = Field(description="Low / Medium / High, from fixed probability tiers.")
     model_version: str = Field(description="Artifact version that produced this prediction.")
+    prediction_id: str = Field(description="Server-generated UUID for this prediction.")
+    customer_id: str | None = Field(default=None, description="Echoed client identifier.")
+    persistence: PersistenceInfo
     decision_basis: DecisionBasis
+
+
+class BatchPredictionRequestWithKey(BatchPredictionRequest):
+    """Batch payload that also accepts a batch-level idempotency key.
+
+    Per-record keys are derived as ``"<key>:<index>"``. Index-based derivation is
+    documented in ``docs/07_DATABASE.md``: retrying an identical batch is fully
+    deduplicated, but a **reordered** retry maps a key to a different customer, so
+    ordering is part of the batch's identity.
+    """
+
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Batch-level key. Each record gets '<key>:<index>'.",
+    )
 
 
 class BatchPredictionResponse(BaseModel):
@@ -133,6 +190,8 @@ class BatchPredictionResponse(BaseModel):
     count: int
     model_version: str
     elapsed_ms: float
+    batch_id: str = Field(description="Groups the rows written by this request.")
+    persistence: PersistenceInfo
 
 
 class ErrorDetail(BaseModel):
