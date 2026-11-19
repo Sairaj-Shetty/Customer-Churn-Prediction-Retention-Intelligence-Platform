@@ -1,0 +1,532 @@
+# Interview preparation — calibration and explainability
+
+Covers Phases 0–4, 8, 9 and 10. Nothing here describes a feature that does not exist in
+the repository. Numbers come from `reports/phase4_calibration.json` and
+`reports/phase4_shap.json`.
+
+---
+
+## Part 1 — Technical explanation
+
+### The 60-second version
+
+"I trained four model families on the IBM Telco churn dataset with leakage-safe
+splits and tuned them with Optuna and RandomizedSearchCV, tracking every run in
+MLflow. I selected on business cost — a missed churner costs ₹500, a wasted offer
+₹50 — which produced a Random Forest at threshold 0.21 that flags 83% of churners.
+The interesting part: that model had *lower accuracy than predicting nobody
+churns*, so accuracy would have shipped a model that never flags anyone.
+
+Then two problems remained. Its probabilities were unusable — the class weighting
+made it claim 41% average churn risk when the truth was 26.5% — so I calibrated it.
+Sigmoid beat isotonic on validation Brier score (0.1303 vs 0.1313), and the
+probability gap collapsed from 14.2 points to 0.3. But PR-AUC didn't move,
+which is exactly right: calibration is a monotone transform, so it cannot improve
+ranking. I report that honestly rather than claiming an uplift.
+
+Finally I added SHAP explanations. The subtlety is that the model consumes 46
+one-hot columns from 19 real features, so I aggregate contributions back to
+parent features — summing, not renaming. And because the served model is
+calibrated, I keep the raw score and the calibrated probability strictly separate:
+SHAP values are additive in the raw score, verified to 1e-15, but they do not sum
+to the probability the user sees."
+
+### Layered depth
+
+**Layer 1 — What is calibration?**
+A model can rank customers correctly while its probability numbers are wrong. A
+class-weighted Random Forest is pushed to score aggressively, so its outputs are
+inflated. Calibration fits a second, monotone mapping from the raw score to a
+probability that matches observed frequencies.
+
+**Layer 2 — Why does it not change PR-AUC?**
+Because a monotone transform preserves ordering. If customer A scored above
+customer B before, A still scores above B afterwards. Every ranking metric — ROC-AUC,
+PR-AUC, KS — depends only on order, so all are invariant. Only probability-dependent
+metrics (Brier, log loss, calibration error) can improve. If someone reports a
+ranking gain from calibration alone, information has leaked.
+
+**Layer 3 — Sigmoid vs isotonic, and how do you choose?**
+Sigmoid (Platt) fits two parameters — a slope and intercept on the logit. It assumes
+the distortion is sigmoidal and needs little data. Isotonic fits any monotone step
+function, so it is more flexible and needs more data; with sparse events it
+overfits and produces flat, stepped probabilities, and it cannot extrapolate
+(it clamps beyond the observed range). I checked whether isotonic was even
+appropriate *before* fitting — I required enough positive events per fold — then
+fitted both and chose on validation Brier. Sigmoid won 0.1303 to 0.1313, a small
+margin, and it also has lower variance.
+
+**Layer 4 — How did you prevent leakage?**
+Calibration is fitted inside the training split with `CalibratedClassifierCV(cv=5)`.
+Inside each fold the entire pipeline — imputer, encoder, scaler, model — is refit,
+so preprocessing statistics never cross fold boundaries either. The method choice
+and the threshold re-optimisation both use validation only. The test split is
+untouched throughout. Phase 3's freeze record is hash-verified, so tampering is
+detectable rather than trust-based.
+
+**Layer 5 — What does SHAP actually compute?**
+Shapley values from cooperative game theory: for each feature, the average marginal
+contribution to the prediction across all possible orderings of feature
+introduction. The properties that matter are **local accuracy** (contributions plus
+baseline equal the prediction exactly), **missingness** (a feature that never
+changes the output gets zero), and **consistency**. `TreeExplainer` computes these
+exactly for tree ensembles in polynomial time by exploiting tree structure, rather
+than by sampling coalitions.
+
+**Layer 6 — The one-hot problem and how aggregation fixes it.**
+The preprocessor one-hot encodes 15 categorical columns, giving 46 model inputs
+from 19 real features. If I report per-column SHAP values, "Contract" appears three
+times and nobody can answer "how much did contract type matter?". Renaming is not
+enough — the values must be *summed*. For a month-to-month customer the three
+dummies might carry +0.09, −0.00, −0.04; only the sum (+0.05) is what that
+customer experienced from contract type. I build the mapping from the fitted
+`ColumnTransformer`'s own `categories_`, not by splitting strings, because levels
+like `No internet service` contain spaces. I also assert the mapping covers all 46
+columns — a one-column misalignment would misattribute everything with no error.
+
+**Layer 7 — The calibration/SHAP space problem.**
+This is the trap. SHAP values for `TreeExplainer` on a scikit-learn classifier are
+additive in *probability* space, not log-odds — I verified that `0.5 + Σ =
+predict_proba` exactly on the real model. But the *served* model is
+`CalibratedClassifierCV`, so the probability a user sees is a non-linear monotone
+function of that raw score. The SHAP values explain the inner forest, not the
+calibrated wrapper. So `raw_score = baseline + Σ contributions` holds exactly, but
+`churn_probability ≠ raw_score`, and contributions do not sum to the displayed
+probability. I return both numbers, label the space, and say so explicitly. I found
+this by writing an additivity assertion in the tests — it failed, and my first
+implementation had been reporting log-odds while SHAP summed in probability space.
+
+---
+
+## Part 2 — ML / MLOps interview questions
+
+### Calibration
+
+**Q: When is a model miscalibrated but still useful?**
+When you only need ranking. Ad ranking or fraud triage that flags the top N per day
+works fine on a monotone score. Calibration becomes mandatory when the number
+itself is consumed: expected-value calculations (₹500 × probability), risk tiers
+shown to humans, or blending with other probabilities. My case is the second —
+retention teams act on "high risk" bands.
+
+**Q: Why does class weighting break calibration?**
+Weighting changes the loss so that mistakes on the minority class cost more. In
+effect it fits a different prior — as if churners were more common than 26.5%.
+Predicted probabilities therefore reflect the *reweighted* population, not the true
+one, so they run high. My measurement: mean predicted 0.4071 vs actual 0.2654.
+
+**Q: How would you detect miscalibration in production?**
+Reliability diagrams (binned predicted vs observed), Brier score, and expected
+calibration error. In production you need labels, which arrive late for churn —
+so I would monitor the mean predicted probability against the known base rate as a
+proxy; a drift in that ratio indicates the calibration has shifted even before
+ground truth arrives.
+
+**Q: Does calibration fix class imbalance?**
+No, these are orthogonal. Imbalance affects what the model learns; calibration fixes
+the resulting probability scale. My model remains imbalanced-aware — recall 0.83 at
+threshold 0.21 — while also being calibrated.
+
+**Q: Why re-optimise the threshold after calibration?**
+Because the threshold lives on the probability axis, which calibration moved. The
+Phase 3 threshold of 0.44 applied to inflated scores; after calibration the same
+decision point sits at 0.21. Reusing 0.44 would have made the model far too
+conservative.
+
+**Q: Brier score of 0.13 — is that good?**
+Compare against the no-skill baseline, not against 0. Brier is mean squared error on
+probabilities. Always predicting the base rate 0.2654 gives 0.2654 × 0.7346 ≈ 0.195.
+So 0.1303 is a 33% improvement over no-skill. I quote the no-skill reference rather
+than the raw number.
+
+### SHAP
+
+**Q: SHAP vs permutation importance vs feature_importances_?**
+`feature_importances_` from a forest is impurity-based: it is computed on training
+data, biased toward high-cardinality features, and gives only a global ranking with
+no direction. Permutation importance measures the drop in a metric when a column is
+shuffled — global and model-agnostic, but no per-customer explanation and it
+suffers from correlated features. SHAP gives consistent, additive, per-prediction
+attributions with known theoretical guarantees. The cost is computation.
+
+**Q: Why can SHAP be misleading with correlated features?**
+Because credit for a shared effect is split arbitrarily between correlated features.
+Tenure and TotalCharges are strongly correlated here — a long-tenured customer has
+high total charges — so their individual attributions can look smaller than the
+concept's true influence, and interpretations like "tenure matters little" would be
+wrong. `TreeExplainer` has an `interventional` vs `tree_path_dependent` mode that
+behaves differently under correlation; I used the default and therefore do not make
+fine-grained comparisons between correlated pairs.
+
+**Q: Is SHAP causal?**
+No. It decomposes a model's output, not the data-generating process. A large
+positive value means the model associates that feature value with higher risk. It
+does not mean intervening would reduce churn — for that you need an experiment or
+causal inference. My API returns this disclaimer with every response.
+
+**Q: How do you explain a calibrated model with SHAP?**
+Explain the inner estimator, and be explicit that the explanation is in raw-score
+space. Because calibration is monotone, the *sign* of every contribution transfers,
+so directional statements remain valid. The magnitudes do not. I report both raw
+score and calibrated probability side by side so nobody can accidentally add them
+together.
+
+**Q: Why TreeExplainer rather than KernelExplainer?**
+`KernelExplainer` is model-agnostic but samples coalitions, so it is approximate,
+slow (seconds per row) and stochastic. `TreeExplainer` is exact and runs in
+polynomial time by walking the trees. Since the champion is a Random Forest, there
+was no reason to accept approximation.
+
+**Q: How do you group one-hot features correctly?**
+Read the fitted encoder's `categories_` and the transformer's output order to map
+each encoded column to its parent, then **sum** the SHAP values within each group.
+Renaming is insufficient because per-customer contributions can have opposite signs
+and only the sum is meaningful. I assert that the mapping covers every output column
+exactly once, and that aggregation preserves the total.
+
+### MLOps
+
+**Q: How do you version a model?**
+An artifact is the fitted pipeline plus metadata in one file: the preprocessing *is*
+part of the model, because splitting them allows train/serve skew. Metadata records
+version, threshold, parent lineage, feature list and dataset hash. The freeze record
+carries a SHA-256 over its own contents, so editing the selected model or threshold
+after the fact raises an error rather than passing silently — I verified this with a
+mutation test.
+
+**Q: How do you keep training and inference separate?**
+Training (tuning, MLflow, DVC) runs outside the serving image. The image contains a
+committed 1.4 MB artifact and the serving code; it never trains and never reads DVC.
+That keeps the image small and the memory footprint inside a 512 MB free tier.
+
+**Q: How do you prevent test-set leakage organisationally, not just in code?**
+Three mechanisms: a static test that fails if the test split is referenced anywhere
+except the evaluation module, freeze-before-load ordering asserted in tests, and the
+hash-verified selection record. The rule is enforced by the toolchain rather than by
+discipline.
+
+**Q: What breaks first in production?**
+The threshold. Calibration and threshold are both fitted on a validation snapshot;
+if the population shifts — say a pricing change alters the tenure mix — the optimal
+threshold moves. That is the argument for drift monitoring on the *input*
+distribution, not just on model metrics, which lag by months for churn.
+
+### API engineering
+
+**Q: Why did you separate `/metrics` from `/model/info`?**
+They answer different questions with different lifetimes. Operational metrics —
+latency, error rate, request counts — describe the service and reset on restart.
+Model metrics — PR-AUC, Brier, recall — describe the model and are fixed at
+training time. A dashboard that puts "requests served" next to "PR-AUC" invites
+someone to quote traffic volume as evidence of quality. I serve them from separate
+data structures behind separate endpoints, and a test asserts the two payloads
+share no keys and that `/model/info` is unchanged by serving traffic.
+
+**Q: Why not Prometheus?**
+It is not a dependency, and adding one to serve four counters on a 512 MB free
+tier is not justified. I wrote a bounded in-process registry instead: latencies as
+an online mean/min/max rather than an unbounded list, and capped endpoint and field
+keys so a client probing random paths cannot grow memory without limit. The
+trade-off is explicit — the numbers are per-process and reset on restart, which
+with a single worker is the complete truth.
+
+**Q: How do you guarantee `/predict` and `/explain` agree?**
+They share one `ServingBundle` built at startup, and both call the same `score()`
+method. Previously the explainer derived its own class from a threshold — a
+parallel implementation that would drift the moment one changed. Now a test posts
+the same customer to both endpoints and asserts the probability, class and
+threshold match exactly.
+
+**Q: Why is your decision threshold below your lowest risk band?**
+Because they answer different questions. The threshold is a cost-optimised action
+trigger — with a missed churner at ₹500 and a wasted offer at ₹50, it is pushed
+down to 0.21 to favour recall. The risk band is a fixed presentation tier
+(Low < 0.30). So 70% of flagged customers are Low or Medium risk. That looks
+contradictory until you realise a customer can be low risk yet still worth
+contacting given the asymmetry. Rather than hide it, every response carries a
+`decision_basis` block with the threshold, its provenance and a plain-language
+explanation — and a test pins the divergence so nobody "fixes" it by quietly
+moving the threshold, which would discard the cost optimisation and invalidate the
+one-shot test evaluation.
+
+**Q: How do you stop a client from re-tuning the threshold?**
+The threshold is read from the artifact metadata at startup and the request schema
+uses `extra="forbid"`, so `{"threshold": 0.99}` is a 422. There is no code path
+that accepts a threshold from a request; `ModelArtifact.predict()` reads it from
+metadata.
+
+**Q: What does strict input validation buy you here?**
+It prevents silent wrong answers. The encoder uses `handle_unknown="ignore"`, so
+`gender="Unknown"` becomes an all-zero one-hot row and the model returns a
+*confident* prediction — a frontend typo produces a plausible-looking number with
+no error. Declaring levels as schema literals makes that a 422. I keep
+`TotalCharges` permissive because the real dataset has blanks and imputing them is
+correct. A test asserts predict and explain accept exactly the same payload.
+
+**Q: How did you verify single and batch are consistent?**
+By asserting equality, not by reading the code: post one customer to `/predict`,
+post the same customer in a one-element batch, compare the full JSON. Also tested
+ordering with a two-customer batch where the risk ordering is known, so a
+sorting bug would flip the assertion.
+
+### Database and persistence
+
+**Q: You return the prediction before writing it. How do you know it was saved?**
+I don't, and the API says so. The write is a FastAPI background task that runs
+after the response is sent, so a caller cannot know when or whether it landed —
+which is why every response carries `persistence.guaranteed: false` with a note.
+The alternative, writing synchronously, couples prediction availability to
+Neon's, and Neon suspends after five minutes idle. For an audit trail nothing
+reads in the request path, that trade is wrong. If durability mattered I would use
+a transactional outbox or an external queue, not in-process tasks.
+
+**Q: What exactly happens to pending writes when the process stops?**
+They are lost. In-process background tasks are not a broker: there is no disk
+queue, no acknowledgement, no redelivery. A deploy, a crash, an OOM kill or
+Render's 15-minute suspend discards whatever is queued. I state that in the README
+rather than implying at-least-once, because a caller has no way to detect the loss
+otherwise.
+
+**Q: How is idempotency enforced?**
+By a **partial unique index** on `idempotency_key` where it is not null. Not by a
+`SELECT`-then-`INSERT`: two concurrent retries can both see "no row" and both
+insert, so a read-then-write is racy. The database constraint cannot be raced. On
+violation, `IntegrityError` is recognised as a duplicate and treated as success —
+a duplicate is not an error.
+
+**Q: Why isn't `customer_id` the idempotency key?**
+Because a customer legitimately has many predictions over time. Using it as a key
+would make the first prediction permanently block every later one, destroying the
+history the table exists to record. It is indexed for lookups, not constrained.
+
+**Q: How does batch idempotency work?**
+A batch-level key expands to `"<key>:<index>"` per record. Retrying the same batch
+in the same order inserts nothing new; each record dedupes independently. The
+subtle part is that **ordering is part of the batch identity** — a reordered retry
+maps key `:0` to a different customer, so the first write wins and the retry is
+suppressed. I chose per-record keys over one batch row because a partial failure
+(7 of 10 written) would otherwise mark the batch complete and lose the missing 3
+forever. A subset retry dedupes the indices it covers but cannot recover rows that
+were never written.
+
+**Q: How did you prove predictions survive a database outage?**
+By pointing the app at a database path that cannot be opened and asserting the
+whole surface: `/predict` and `/predict/batch` return 200 with valid predictions,
+`/health` stays 200, `/ready` returns 503 with `database.ok=false`, and `/metrics`
+reports `failure_rate: 1.0` with a retry recorded. That test is the requirement,
+so it is automated rather than manual.
+
+**Q: Why separate `/health` from `/ready`?**
+Liveness answers "should the platform restart me?" — model loaded, nothing else.
+Readiness answers "can I do my whole job?" — model plus `SELECT 1`. They must be
+different because Neon sleeps after five minutes idle: a database-bound liveness
+probe would fail on every idle period and restart the container in a loop that
+cannot possibly fix a sleeping database. `render.yaml` is pinned to `/health` and a
+test enforces it. `prediction_available` stays true on a degraded `/ready`,
+because it honestly still is.
+
+**Q: Why a 2-connection pool?**
+Neon's free tier bills in CU-hours and suspends after ~5 minutes idle. A large
+warm pool either keeps compute awake, burning the monthly budget, or fills with
+sockets the server already dropped. With best-effort writes, waiting briefly in a
+small pool queue is strictly better than either. `pool_recycle=300` stays inside
+the suspend window and `pool_pre_ping` discards dead connections before use —
+together those are what make scale-to-zero survivable.
+
+**Q: Why did you need `with_variant(Integer, "sqlite")` on the primary key?**
+Because SQLite only auto-assigns a primary key when the declared type is exactly
+`INTEGER` — the rowid alias. I declared `BIGINT PRIMARY KEY` to get `BIGSERIAL` on
+PostgreSQL, which silently made SQLite require an explicit value and broke every
+insert. `with_variant` gives `BIGSERIAL` on PostgreSQL and `INTEGER` on SQLite
+from the same logical column. It was caught by running the repository against a
+migrated database rather than by reading the DDL.
+
+**Q: Why keep features out of the database if you will need drift later?**
+Because they are different problems. An audit log answers "what did we decide and
+when"; drift answers "has the input distribution moved". Merging them makes a PII
+store with no retention policy and an unclear lifecycle. Phase 10 uses the split
+files as the baseline and a separate production-observation artifact for the live
+distribution. Worth being precise about: the split files are the *baseline*, not
+the production distribution — drift needs live feature observations, which is a
+deliberate design item, not an accident of this schema.
+
+**Q: What would you change at 100x the traffic?**
+Move persistence out of process — a queue plus a consumer, so writes survive
+restarts and can be retried with real backoff. I would also add partitioning or
+retention on `created_at`, since this table only grows. At that point
+`prometheus-client` and a real metrics backend become justified too.
+
+### Drift monitoring
+
+**Q: Why not store production features so you can run Evidently properly?**
+Because that contradicts the privacy decision one phase earlier, and I would rather
+have a documented limit than a quiet reversal. Storing feature vectors makes the
+audit table a PII database with no retention policy. Instead I store histogram
+counts: `(feature, bucket) -> count`. Nothing is linkable to a person. The cost is
+real — no joint/multivariate drift, and numeric monitoring only to bin resolution —
+and I state it in the README rather than hiding it.
+
+**Q: What do you gain anyway?**
+Prediction drift at full fidelity, for free. The audit table already has
+`churn_probability` and `risk_band` per prediction, so I compare the output
+distribution against a reference generated by the frozen artifact on validation.
+That is the distribution the business actually acts on.
+
+**Q: Your UPSERT increments a counter. Isn't that non-idempotent?**
+Yes, and that was the main design problem. Two layers fix it. First, observations
+only record when the audit insert returned `INSERTED`, so a retried
+`idempotency_key` is skipped for free. Second, `prediction_id` is a primary key in a
+ledger written in the same savepoint as the increments, so a duplicate task
+execution rolls the whole thing back.
+
+**Q: Why a savepoint rather than a plain transaction?**
+Without one, detecting a duplicate rolls back the caller's entire transaction. A
+batch writing ten observations would lose the first nine when the tenth was a retry.
+The savepoint contains the rollback to one attempt.
+
+**Q: How do you know the ledger insert being released matters?**
+Because a test caught it. I opened `begin_nested()` and never committed it on the
+success path, so savepoints nested — 500 writes in one session hit
+`RecursionError` inside SQLAlchemy's SAVEPOINT name formatting. `else:
+savepoint.commit()` fixes it.
+
+**Q: What if the aggregate write fails after the audit row lands?**
+The observation is lost. That means the aggregate *undercounts* — never overcounts,
+which is the direction that matters, because an inflated bucket fabricates drift.
+Aggregates are therefore approximately consistent with audit, not transactionally
+consistent. Making them transactional would require writing in the request path,
+breaking the Phase 9 guarantee that a prediction never depends on the database.
+
+**Q: What if the audit write fails but the aggregate succeeds?**
+It cannot happen: aggregates only run after a successful audit insert. That
+ordering makes the failure mode strictly "missing aggregates", never "aggregates
+diverging from audit".
+
+**Q: Why 400 observations?**
+Because I measured it. I resampled the reference against itself — zero true drift —
+and counted false alarms. At n=100, 87% of runs flagged something. At n=200, 13%.
+At 400, zero across 30 repeats; 300 also measured clean but I kept 400. It is an
+engineering floor backed by an experiment, not a statistical guarantee, and I do not
+present it as one.
+
+**Q: What happens below 400?**
+The report returns `insufficient_data` and **no feature verdicts at all**. Not a
+cautious number — no number. This matters because Evidently will happily report
+PSI 2.15 on 3 rows drawn from the reference itself, with no warning. There is no
+`min_samples` that makes that safe, so the gate is ours.
+
+**Q: Why Benjamini–Hochberg?**
+19 features at α=0.10 uncorrected gives a false alarm roughly 1 run in 7. BH
+controls the false discovery rate; Bonferroni would need p < 0.0053 and throw away
+genuine effects. A human reviews the list, so a small expected proportion of false
+discoveries is acceptable — that is exactly the framing BH is designed for.
+
+**Q: Why not run a KS test on the aggregates?**
+Because it would be fabricated. Reconstructing rows from bin counts and testing them
+produces a p-value that reflects the arbitrary choice of bin midpoint, not the data.
+I use chi-square on the real counts — a legitimate goodness-of-fit test, verified
+calibrated at 3.0% rejection at α=0.05 — plus PSI and JS as effect sizes that make
+no significance claim.
+
+**Q: Why monitor before one-hot encoding?**
+A category disappearing entirely (`No phone service`, 9.8% of rows) is one column
+out of 46 after encoding — invisible. On the raw 3-category column it scores JS
+0.226 against a 0.1 threshold. Same reasoning as aggregating SHAP values back to
+parent features in Phase 4.
+
+**Q: Unseen categories — that's a test too, surely?**
+No, and treating it as one was a bug I fixed. A value outside the frozen training
+domain has no reference support to test against; it is a structural observation. My
+first implementation let chi-square pooling merge the empty `__unseen__` bucket into
+the largest bucket, which **destroyed the signal**: 50 unseen values in 500 rows
+gave p=0.086, not significant. With correct adjacent-bucket pooling it is
+p=0.00018. Unseen detection is now reported separately, without a p-value.
+
+**Q: How do you stop a model deploy corrupting a window?**
+`model_version` and `schema_hash` are both part of the window key, so a deploy or a
+re-binning starts a fresh window instead of averaging two incomparable
+distributions. The schema hash covers the bin edges and categorical domains, so a
+regenerated artifact invalidates cleanly too.
+
+**Q: Rejected requests never reach your recorder. Isn't that a blind spot?**
+Yes. The API returns 422 before scoring, so a category disappearing upstream would
+look identical to steady state. I added a validation-error handler that counts
+`(feature, reason)` — both closed vocabularies. No value is stored: a typo, a PII
+leak into the wrong field, and someone probing the schema all produce the same
+integer.
+
+**Q: Is any of this production-verified?**
+No, and I say so. Every detection test used injected shifts, and this environment
+has no PostgreSQL and no outbound network. It is SQLite-tested and
+Neon-config-complete. Claiming production verification would be exactly the kind of
+overstatement the project avoids elsewhere.
+
+---
+
+## Part 3 — Resume bullets
+
+Only genuinely completed work. Every number is from an actual run.
+
+> **Customer Churn Prediction & Retention Platform** — Python, scikit-learn,
+> XGBoost, Optuna, MLflow, SHAP, FastAPI, Streamlit, Docker
+>
+> - Built an end-to-end churn pipeline over 7,043 customers (26.5% churn),
+>   comparing 12 model configurations across four families with RandomizedSearchCV
+>   and Optuna (pruning active), tracked in MLflow with a versioned model registry.
+> - Selected on a cost-sensitive objective — ₹500 per missed churner, ₹50 per wasted
+>   retention offer — instead of accuracy; the shipped model flags **83.4% of
+>   churners** at **0.7253 accuracy**, which is *below* the 0.7346 all-negative
+>   baseline yet saves **₹139,750** in expected cost. Documented this accuracy trap
+>   explicitly.
+> - Diagnosed class-weight-induced miscalibration (mean predicted 0.4071 vs actual
+>   0.2654) and fixed it with a training-only cross-validated sigmoid calibrator,
+>   cutting Brier score **15.7%** (0.1546 → 0.1303) and the probability gap **98%**
+>   while correctly reporting that ranking metrics are unchanged by construction.
+> - Implemented SHAP explainability that aggregates 46 one-hot columns back to 19
+>   parent features, with per-prediction explanations verified additive to 1e-15 and
+>   an explicit raw-score-vs-calibrated-probability contract.
+> - Built the serving API — `/predict`, `/predict/batch`, `/explain`,
+>   `/explain/batch`, `/model/info`, `/metrics` — around a single startup-loaded
+>   artifact so prediction and explanation cannot diverge, with lazy SHAP import to
+>   fit a 512 MB free-tier limit (measured peak **362.7 MB**) and strict schema
+>   validation that turns an unknown category into a 422 instead of a silently
+>   confident prediction.
+> - Separated operational metrics (latency, error rate) from frozen ML evaluation
+>   metrics (PR-AUC, Brier) into distinct endpoints with a bounded in-process
+>   registry — avoiding a new dependency on a 512 MB tier — and documented the
+>   per-process trade-off.
+> - Added PostgreSQL persistence for prediction auditing with Alembic-owned
+>   migrations (no `create_all`), enforcing idempotency through a **partial unique
+>   index** rather than a racy read-then-write, and keeping predictions available
+>   through a complete database outage via bounded-retry background writes with
+>   `persistence.guaranteed: false` stated in every response.
+> - Built aggregate-only drift monitoring that stores histogram counts rather than
+>   customer records, with idempotent recording (audit-outcome gate + savepoint
+>   ledger) so retries can never inflate a bucket, and a **measured** 400-observation
+>   floor below which no drift verdict is issued.
+> - Enforced leakage safety with a hash-verified freeze record, a static test
+>   banning test-set access outside the evaluation module, and **627 automated
+>   tests**.
+
+### What **not** to claim
+
+Do not say any of these — none is true yet:
+
+- ❌ "Deployed on AWS / ECS / Fargate" — deliberately out of budget, not deployed.
+- ❌ "Live at <URL>" — the app runs locally; public hosting needs the maintainer's accounts.
+- ❌ "Guarantees predictions are stored" — writes are best-effort background
+  tasks and pending writes are lost on restart. The honest claim is "audits
+  predictions in PostgreSQL on a best-effort basis".
+- ❌ "Verified against a live Neon instance" — the Neon path is config-complete
+  and offline-verified; live TLS/scale-to-zero behaviour still needs a real project.
+- ❌ "Stores customer features for drift analysis" — deliberately not; monitoring
+  stores histogram counts only.
+- ❌ "Detects multivariate or interaction drift" — requires row-level data, which
+  was deliberately not collected.
+- ❌ "Drift detection is production-verified" — every test used injected shifts.
+- ❌ "Evidently drift monitoring" — not implemented.
+- ❌ "CI/CD pipeline running" — no workflow file yet.
+- ❌ "Calibration improved model accuracy/detection" — it did not; it improved
+  probability quality only, and business cost rose slightly.
+- ❌ "92% accuracy" or similar — the champion is 0.7253, deliberately below a naive
+  baseline, and that is the point.

@@ -1,0 +1,37 @@
+# Dashboard image: a thin HTTP client, not a model server.
+#
+# It installs only `.[frontend]` (streamlit + requests + pandas). Installing the
+# ML stack here would add ~360 MB of image and hundreds of MB of RAM to a
+# process that never imports sklearn — and Streamlit Community Cloud caps the app
+# at 2.7 GB while Render's free tier grants 512 MB.
+from python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Streamlit writes config/credentials here; keep it inside the image user.
+    STREAMLIT_HOME=/home/appuser/.streamlit
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN pip install --upgrade pip && pip install -e ".[frontend]"
+
+# Do not run as root.
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8501
+
+# The API URL is supplied at run time via CHURN_API_URL (see docker-compose.yml).
+# Binding to 0.0.0.0 is what makes the container reachable from the host.
+#
+# --server.headless stops Streamlit from trying to open a browser, which inside a
+# container would just hang. --browser.gatherUsageStats=false keeps local usage
+# off Streamlit's servers.
+CMD ["streamlit", "run", "src/churn/dashboard/app.py", \
+     "--server.address=0.0.0.0", \
+     "--server.port=8501", \
+     "--server.headless=true", \
+     "--browser.gatherUsageStats=false"]

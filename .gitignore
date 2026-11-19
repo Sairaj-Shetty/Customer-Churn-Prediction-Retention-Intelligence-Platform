@@ -1,0 +1,103 @@
+# ---------------- Python ----------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---------------- Data (tracked by DVC, NOT git) ----------------
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# ---------------- Model artifacts ----------------
+# Everything is ignored by default, with one deliberate exception: the served
+# artifact is COMMITTED. The deployment target has no persistent disk and no
+# object store (free tier), so the calibrated model must ship inside the
+# repository and be baked into the image at build time.
+artifacts/*
+!artifacts/model_calibrated/
+!artifacts/model_calibrated/pipeline.joblib
+!artifacts/model_calibrated/metadata.json
+# Drift monitoring artifacts are small JSON parameter files (no observations),
+# so they ship with the code: the deployed service must bin features using the
+# same frozen edges the monitoring job uses.
+!artifacts/monitoring/
+!artifacts/monitoring/schema.json
+!artifacts/monitoring/prediction_reference.json
+
+# Generated drift reports are build output, not source.
+reports/drift/drift_*.json
+reports/drift/drift_*.md
+*.pkl
+*.joblib
+!artifacts/model_calibrated/pipeline.joblib
+
+# ---------------- Local databases ----------------
+# SQLite files created by running the API locally. Never committed.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+!mlflow.db.example
+predictions.db
+
+# ---------------- MLflow ----------------
+mlruns/
+mlartifacts/
+mlflow.db
+
+# ---------------- Trained model output (NOT the package) ---------------- #
+# Deliberately anchored with a leading `/` so it matches only the repository-root
+# `models/` output directory.
+#
+# An unanchored `models/` was here previously and silently excluded
+# `src/churn/models/` — the entire training, calibration and selection package —
+# from every commit, because a bare directory pattern matches at any depth. The
+# package existed only as untracked files on one machine; it was unrecoverable
+# when that checkout was lost. Keep the leading slash.
+/models/
+
+# ---------------- Secrets / env ----------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------------- Reports (generated) ----------------
+# Figures are committed: the README links to them, and a broken image in the
+# project's front page is worse than 200 KB of PNGs.
+reports/figures/*.png
+!reports/figures/*.png
+reports/*.html
+reports/drift/
+!reports/.gitkeep
+
+# ---------------- OS / editors ----------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---------------- Jupyter ----------------
+.ipynb_checkpoints/
+
+# ---------------- DVC internal ----------------
+.dvc/tmp/
+.dvc/cache/

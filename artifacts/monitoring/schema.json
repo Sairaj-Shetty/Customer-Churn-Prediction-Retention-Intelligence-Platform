@@ -1,0 +1,340 @@
+{
+  "model_version": "phase4-calibrated-sigmoid",
+  "created_at_utc": "2026-11-19T09:11:38+00:00",
+  "reference_rows": 4225,
+  "schema_hash": "d007793ae1dccf6643a3017ec3c867e60f55d6f43545f7fb057b702d3635393d",
+  "built_from_split": "train",
+  "n_bins": {
+    "tenure": 10,
+    "MonthlyCharges": 10,
+    "TotalCharges": 10
+  },
+  "numeric": {
+    "tenure": {
+      "edges": [
+        2.0,
+        6.0,
+        12.0,
+        19.0,
+        29.0,
+        40.0,
+        50.0,
+        61.0,
+        69.0
+      ],
+      "reference_share": [
+        0.08899408284023669,
+        0.1050887573964497,
+        0.10011834319526627,
+        0.09869822485207101,
+        0.10272189349112426,
+        0.10011834319526627,
+        0.09514792899408284,
+        0.10840236686390532,
+        0.09301775147928994,
+        0.1076923076923077
+      ],
+      "reference_null_rate": 0.0,
+      "reference_mean": 32.44284023668639,
+      "reference_median": 29.0,
+      "labels": [
+        "(-inf,2)",
+        "[2,6)",
+        "[6,12)",
+        "[12,19)",
+        "[19,29)",
+        "[29,40)",
+        "[40,50)",
+        "[50,61)",
+        "[61,69)",
+        "[69,inf)"
+      ]
+    },
+    "MonthlyCharges": {
+      "edges": [
+        20.05,
+        25.05,
+        45.4,
+        59.0,
+        70.55,
+        79.25,
+        85.74000000000001,
+        94.55,
+        103.27999999999999
+      ],
+      "reference_share": [
+        0.09112426035502959,
+        0.10863905325443787,
+        0.09940828402366864,
+        0.10059171597633136,
+        0.10011834319526627,
+        0.09893491124260355,
+        0.10106508875739645,
+        0.09964497041420119,
+        0.10035502958579881,
+        0.10011834319526627
+      ],
+      "reference_null_rate": 0.0,
+      "reference_mean": 64.89450887573965,
+      "reference_median": 70.55,
+      "labels": [
+        "(-inf,20.05)",
+        "[20.05,25.05)",
+        "[25.05,45.4)",
+        "[45.4,59)",
+        "[59,70.55)",
+        "[70.55,79.25)",
+        "[79.25,85.74)",
+        "[85.74,94.55)",
+        "[94.55,103.28)",
+        "[103.28,inf)"
+      ]
+    },
+    "TotalCharges": {
+      "edges": [
+        85.1,
+        272.4000000000001,
+        547.665,
+        930.94,
+        1373.625,
+        2079.1800000000003,
+        3251.8450000000003,
+        4513.830000000002,
+        5973.130000000002
+      ],
+      "reference_share": [
+        0.09981033665244192,
+        0.10028449502133713,
+        0.10004741583688952,
+        0.09981033665244192,
+        0.10004741583688952,
+        0.10004741583688952,
+        0.09981033665244192,
+        0.10004741583688952,
+        0.10004741583688952,
+        0.10004741583688952
+      ],
+      "reference_null_rate": 0.0016568047337278107,
+      "reference_mean": 2299.2988975817925,
+      "reference_median": 1373.625,
+      "labels": [
+        "(-inf,85.1)",
+        "[85.1,272.4)",
+        "[272.4,547.665)",
+        "[547.665,930.94)",
+        "[930.94,1373.62)",
+        "[1373.62,2079.18)",
+        "[2079.18,3251.85)",
+        "[3251.85,4513.83)",
+        "[4513.83,5973.13)",
+        "[5973.13,inf)"
+      ]
+    }
+  },
+  "categorical": {
+    "gender": {
+      "domain": [
+        "Female",
+        "Male"
+      ],
+      "reference_share": [
+        0.4970414201183432,
+        0.5029585798816568
+      ],
+      "reference_null_rate": 0.0
+    },
+    "SeniorCitizen": {
+      "domain": [
+        "0",
+        "1"
+      ],
+      "reference_share": [
+        0.8385798816568047,
+        0.16142011834319528
+      ],
+      "reference_null_rate": 0.0
+    },
+    "Partner": {
+      "domain": [
+        "No",
+        "Yes"
+      ],
+      "reference_share": [
+        0.5183431952662721,
+        0.4816568047337278
+      ],
+      "reference_null_rate": 0.0
+    },
+    "Dependents": {
+      "domain": [
+        "No",
+        "Yes"
+      ],
+      "reference_share": [
+        0.7017751479289941,
+        0.2982248520710059
+      ],
+      "reference_null_rate": 0.0
+    },
+    "PhoneService": {
+      "domain": [
+        "No",
+        "Yes"
+      ],
+      "reference_share": [
+        0.09798816568047337,
+        0.9020118343195266
+      ],
+      "reference_null_rate": 0.0
+    },
+    "MultipleLines": {
+      "domain": [
+        "No",
+        "No phone service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.4795266272189349,
+        0.09798816568047337,
+        0.42248520710059173
+      ],
+      "reference_null_rate": 0.0
+    },
+    "InternetService": {
+      "domain": [
+        "DSL",
+        "Fiber optic",
+        "No"
+      ],
+      "reference_share": [
+        0.3398816568047337,
+        0.44,
+        0.22011834319526627
+      ],
+      "reference_null_rate": 0.0
+    },
+    "OnlineSecurity": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.4906508875739645,
+        0.22011834319526627,
+        0.28923076923076924
+      ],
+      "reference_null_rate": 0.0
+    },
+    "OnlineBackup": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.43124260355029587,
+        0.22011834319526627,
+        0.3486390532544379
+      ],
+      "reference_null_rate": 0.0
+    },
+    "DeviceProtection": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.4307692307692308,
+        0.22011834319526627,
+        0.34911242603550297
+      ],
+      "reference_null_rate": 0.0
+    },
+    "TechSupport": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.48284023668639053,
+        0.22011834319526627,
+        0.29704142011834317
+      ],
+      "reference_null_rate": 0.0
+    },
+    "StreamingTV": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.38390532544378697,
+        0.22011834319526627,
+        0.39597633136094673
+      ],
+      "reference_null_rate": 0.0
+    },
+    "StreamingMovies": {
+      "domain": [
+        "No",
+        "No internet service",
+        "Yes"
+      ],
+      "reference_share": [
+        0.3893491124260355,
+        0.22011834319526627,
+        0.3905325443786982
+      ],
+      "reference_null_rate": 0.0
+    },
+    "Contract": {
+      "domain": [
+        "Month-to-month",
+        "One year",
+        "Two year"
+      ],
+      "reference_share": [
+        0.5453254437869822,
+        0.21207100591715977,
+        0.24260355029585798
+      ],
+      "reference_null_rate": 0.0
+    },
+    "PaperlessBilling": {
+      "domain": [
+        "No",
+        "Yes"
+      ],
+      "reference_share": [
+        0.4151479289940828,
+        0.5848520710059172
+      ],
+      "reference_null_rate": 0.0
+    },
+    "PaymentMethod": {
+      "domain": [
+        "Bank transfer (automatic)",
+        "Credit card (automatic)",
+        "Electronic check",
+        "Mailed check"
+      ],
+      "reference_share": [
+        0.2208284023668639,
+        0.2165680473372781,
+        0.3337278106508876,
+        0.2288757396449704
+      ],
+      "reference_null_rate": 0.0
+    }
+  },
+  "notes": [
+    "Bins and domains are frozen at training time; monitoring never re-bins.",
+    "Monitoring is pre-encoding: one-hot columns are never monitored.",
+    "Contains no customer observations, only distribution parameters.",
+    "Quantile bins holding < 2% of reference rows are merged into a neighbour."
+  ]
+}

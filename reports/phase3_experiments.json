@@ -1,0 +1,998 @@
+{
+  "dataset_sha256": "16320c9c1ec72448db59aa0a26a0b95401046bef5d02fd3aeb906448e3055e91",
+  "cost_matrix": {
+    "false_negative": 500.0,
+    "false_positive": 50.0,
+    "true_positive": 0.0,
+    "true_negative": 0.0
+  },
+  "threshold_config": {
+    "min": 0.01,
+    "max": 0.99,
+    "step": 0.01,
+    "precision_floor": 0.5,
+    "sensitivity_band": 0.05
+  },
+  "duration_seconds": 754.98,
+  "candidates": [
+    {
+      "model_name": "logistic_regression__none",
+      "family": "logistic_regression",
+      "weighting": "none",
+      "best_params": {
+        "penalty": "l1",
+        "C": 0.5618075481390491
+      },
+      "cv_pr_auc_mean": 0.663595744623562,
+      "cv_pr_auc_std": 0.044825285053199763,
+      "cv_roc_auc_mean": 0.8445125956351063,
+      "cv_roc_auc_std": 0.019153223438570257,
+      "validation_threshold": 0.25,
+      "validation_precision": 0.5080645161290323,
+      "validation_recall": 0.8422459893048129,
+      "validation_f1": 0.6338028169014085,
+      "validation_roc_auc": 0.8597819628510166,
+      "validation_pr_auc": 0.6770512145388985,
+      "validation_brier_score": 0.13043854847060862,
+      "validation_business_cost": 44750.0,
+      "validation_cost_per_customer": 31.76011355571327,
+      "validation_confusion": {
+        "true_positive": 315,
+        "false_positive": 305,
+        "true_negative": 730,
+        "false_negative": 59
+      },
+      "validation_mean_predicted": 0.27131355411476954,
+      "validation_calibration_gap": 0.00587707434188095,
+      "cost_at_default_threshold": 80300.0,
+      "cost_savings_vs_default": 35550.0,
+      "floor_binding": false,
+      "complexity": 15,
+      "is_dummy": false,
+      "notes": "Unweighted baseline. Often the strongest model on this dataset.",
+      "duration_seconds": 83.38,
+      "tuner": "optuna",
+      "n_trials_completed": 22,
+      "n_trials_pruned": 8,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.645272954704033,
+        0.7247245704662754,
+        0.70343783830755,
+        0.644309418227687,
+        0.6002339414122645
+      ],
+      "cv_pr_auc": 0.663595744623562
+    },
+    {
+      "model_name": "logistic_regression__balanced",
+      "family": "logistic_regression",
+      "weighting": "balanced",
+      "best_params": {
+        "penalty": "l1",
+        "C": 0.12875480499214478
+      },
+      "cv_pr_auc_mean": 0.6613295500748502,
+      "cv_pr_auc_std": 0.04587640628502795,
+      "cv_roc_auc_mean": 0.8436069985232677,
+      "cv_roc_auc_std": 0.02030445483983805,
+      "validation_threshold": 0.48,
+      "validation_precision": 0.5098039215686274,
+      "validation_recall": 0.8342245989304813,
+      "validation_f1": 0.6328600405679513,
+      "validation_roc_auc": 0.8577385104239325,
+      "validation_pr_auc": 0.6739082554393823,
+      "validation_brier_score": 0.16395898080231988,
+      "validation_business_cost": 46000.0,
+      "validation_cost_per_customer": 32.64726756564939,
+      "validation_confusion": {
+        "true_positive": 312,
+        "false_positive": 300,
+        "true_negative": 735,
+        "false_negative": 62
+      },
+      "validation_mean_predicted": 0.4255618777830543,
+      "validation_calibration_gap": 0.16012539801016573,
+      "cost_at_default_threshold": 48400.0,
+      "cost_savings_vs_default": 2400.0,
+      "floor_binding": false,
+      "complexity": 15,
+      "is_dummy": false,
+      "notes": "Balanced weighting inflates probabilities; watch Brier score.",
+      "duration_seconds": 46.22,
+      "tuner": "optuna",
+      "n_trials_completed": 18,
+      "n_trials_pruned": 12,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6395671343326216,
+        0.7280905970215285,
+        0.6992379770787737,
+        0.6388331324528427,
+        0.6009189094884848
+      ],
+      "cv_pr_auc": 0.6613295500748502
+    },
+    {
+      "model_name": "random_forest__none",
+      "family": "random_forest",
+      "weighting": "none",
+      "best_params": {
+        "max_depth": 18,
+        "n_estimators": 300,
+        "min_samples_split": 11,
+        "min_samples_leaf": 20,
+        "max_features": "sqrt"
+      },
+      "cv_pr_auc_mean": 0.6703106630730619,
+      "cv_pr_auc_std": 0.030471892716367247,
+      "cv_roc_auc_mean": 0.8493173762772992,
+      "cv_roc_auc_std": 0.015392127468657375,
+      "validation_threshold": 0.25,
+      "validation_precision": 0.5071542130365659,
+      "validation_recall": 0.8529411764705882,
+      "validation_f1": 0.6360917248255235,
+      "validation_roc_auc": 0.8580084734816192,
+      "validation_pr_auc": 0.6706996021863709,
+      "validation_brier_score": 0.13192000139567162,
+      "validation_business_cost": 43000.0,
+      "validation_cost_per_customer": 30.518097941802697,
+      "validation_confusion": {
+        "true_positive": 319,
+        "false_positive": 310,
+        "true_negative": 725,
+        "false_negative": 55
+      },
+      "validation_mean_predicted": 0.26764497288968836,
+      "validation_calibration_gap": 0.00220849311679977,
+      "cost_at_default_threshold": 103300.0,
+      "cost_savings_vs_default": 60300.0,
+      "floor_binding": false,
+      "complexity": 19,
+      "is_dummy": false,
+      "notes": "",
+      "duration_seconds": 54.83,
+      "tuner": "optuna",
+      "n_trials_completed": 12,
+      "n_trials_pruned": 3,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6443400931848355,
+        0.7094939997724442,
+        0.7019137620753134,
+        0.6625637340972595,
+        0.6332417262354572
+      ],
+      "cv_pr_auc": 0.6703106630730619
+    },
+    {
+      "model_name": "random_forest__balanced",
+      "family": "random_forest",
+      "weighting": "balanced",
+      "best_params": {
+        "max_depth": 13,
+        "n_estimators": 500,
+        "min_samples_split": 35,
+        "min_samples_leaf": 17,
+        "max_features": "sqrt"
+      },
+      "cv_pr_auc_mean": 0.6680878442309758,
+      "cv_pr_auc_std": 0.028940774200284156,
+      "cv_roc_auc_mean": 0.8490348722144304,
+      "cv_roc_auc_std": 0.015337689168705235,
+      "validation_threshold": 0.43,
+      "validation_precision": 0.5007776049766719,
+      "validation_recall": 0.8609625668449198,
+      "validation_f1": 0.6332350049164208,
+      "validation_roc_auc": 0.8588751969826138,
+      "validation_pr_auc": 0.6711891802532539,
+      "validation_brier_score": 0.15498786399919046,
+      "validation_business_cost": 42050.0,
+      "validation_cost_per_customer": 29.843860894251243,
+      "validation_confusion": {
+        "true_positive": 322,
+        "false_positive": 321,
+        "true_negative": 714,
+        "false_negative": 52
+      },
+      "validation_mean_predicted": 0.4080075138566268,
+      "validation_calibration_gap": 0.14257103408373822,
+      "cost_at_default_threshold": 48600.0,
+      "cost_savings_vs_default": 6550.0,
+      "floor_binding": false,
+      "complexity": 19,
+      "is_dummy": false,
+      "notes": "",
+      "duration_seconds": 67.12,
+      "tuner": "optuna",
+      "n_trials_completed": 13,
+      "n_trials_pruned": 2,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6452404619227865,
+        0.7015159696457689,
+        0.7010401422518977,
+        0.6623678626976451,
+        0.6302747846367804
+      ],
+      "cv_pr_auc": 0.6680878442309758
+    },
+    {
+      "model_name": "random_forest__balanced_subsample",
+      "family": "random_forest",
+      "weighting": "balanced_subsample",
+      "best_params": {
+        "max_depth": 24,
+        "n_estimators": 200,
+        "min_samples_split": 3,
+        "min_samples_leaf": 17,
+        "max_features": "sqrt"
+      },
+      "cv_pr_auc_mean": 0.6685496649677689,
+      "cv_pr_auc_std": 0.030715033633425974,
+      "cv_roc_auc_mean": 0.8484849989239891,
+      "cv_roc_auc_std": 0.01597809079664382,
+      "validation_threshold": 0.44,
+      "validation_precision": 0.5046728971962616,
+      "validation_recall": 0.8663101604278075,
+      "validation_f1": 0.6377952755905512,
+      "validation_roc_auc": 0.8597419204836084,
+      "validation_pr_auc": 0.6740104522537566,
+      "validation_brier_score": 0.1545586364468571,
+      "validation_business_cost": 40900.0,
+      "validation_cost_per_customer": 29.027679205110008,
+      "validation_confusion": {
+        "true_positive": 324,
+        "false_positive": 318,
+        "true_negative": 717,
+        "false_negative": 50
+      },
+      "validation_mean_predicted": 0.40707226661656953,
+      "validation_calibration_gap": 0.14163578684368094,
+      "cost_at_default_threshold": 48000.0,
+      "cost_savings_vs_default": 7100.0,
+      "floor_binding": false,
+      "complexity": 19,
+      "is_dummy": false,
+      "notes": "Recomputes class weights per bootstrap sample; less aggressive than balanced.",
+      "duration_seconds": 71.88,
+      "tuner": "optuna",
+      "n_trials_completed": 12,
+      "n_trials_pruned": 3,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.646371622904413,
+        0.7084542561403852,
+        0.7001175413423573,
+        0.6584166435295675,
+        0.6293882609221212
+      ],
+      "cv_pr_auc": 0.6685496649677689
+    },
+    {
+      "model_name": "gradient_boosting__none",
+      "family": "gradient_boosting",
+      "weighting": "none",
+      "best_params": {
+        "subsample": 0.8858707768930936,
+        "n_estimators": 279,
+        "min_samples_leaf": 23,
+        "max_depth": 3,
+        "learning_rate": 0.013661017485290347
+      },
+      "cv_pr_auc_mean": 0.671009091161668,
+      "cv_pr_auc_std": 0.027722581593092873,
+      "cv_roc_auc_mean": 0.8486994469675044,
+      "cv_roc_auc_std": 0.015687381381138447,
+      "validation_threshold": 0.23,
+      "validation_precision": 0.5039619651347068,
+      "validation_recall": 0.8502673796791443,
+      "validation_f1": 0.6328358208955224,
+      "validation_roc_auc": 0.857928388746803,
+      "validation_pr_auc": 0.6752830012347703,
+      "validation_brier_score": 0.13104466985240185,
+      "validation_business_cost": 43650.0,
+      "validation_cost_per_customer": 30.979418026969483,
+      "validation_confusion": {
+        "true_positive": 318,
+        "false_positive": 313,
+        "true_negative": 722,
+        "false_negative": 56
+      },
+      "validation_mean_predicted": 0.26725455670655773,
+      "validation_calibration_gap": 0.0018180769336691438,
+      "cost_at_default_threshold": 99850.0,
+      "cost_savings_vs_default": 56200.0,
+      "floor_binding": false,
+      "complexity": 20,
+      "is_dummy": false,
+      "notes": "",
+      "duration_seconds": 124.17,
+      "tuner": "randomized",
+      "n_trials_completed": 12,
+      "n_trials_pruned": 0,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.65338117955979,
+        0.6967451286800311,
+        0.7060828631387547,
+        0.6682212419964625,
+        0.6306150424333017
+      ],
+      "cv_pr_auc": 0.671009091161668
+    },
+    {
+      "model_name": "gradient_boosting__balanced",
+      "family": "gradient_boosting",
+      "weighting": "sample_weight_balanced",
+      "best_params": {
+        "subsample": 0.8027087299900162,
+        "n_estimators": 116,
+        "min_samples_leaf": 29,
+        "max_depth": 3,
+        "learning_rate": 0.07396047025243793
+      },
+      "cv_pr_auc_mean": 0.6716610039803343,
+      "cv_pr_auc_std": 0.023555938974921507,
+      "cv_roc_auc_mean": 0.8470704983785629,
+      "cv_roc_auc_std": 0.015290089908320084,
+      "validation_threshold": 0.45,
+      "validation_precision": 0.5023771790808241,
+      "validation_recall": 0.8475935828877005,
+      "validation_f1": 0.6308457711442786,
+      "validation_roc_auc": 0.85780955333385,
+      "validation_pr_auc": 0.6808979227581746,
+      "validation_brier_score": 0.1580442335100823,
+      "validation_business_cost": 44200.0,
+      "validation_cost_per_customer": 31.369765791341376,
+      "validation_confusion": {
+        "true_positive": 317,
+        "false_positive": 314,
+        "true_negative": 721,
+        "false_negative": 57
+      },
+      "validation_mean_predicted": 0.4096939505927579,
+      "validation_calibration_gap": 0.14425747081986934,
+      "cost_at_default_threshold": 49300.0,
+      "cost_savings_vs_default": 5100.0,
+      "floor_binding": false,
+      "complexity": 20,
+      "is_dummy": false,
+      "notes": "",
+      "duration_seconds": 121.46,
+      "tuner": "randomized",
+      "n_trials_completed": 12,
+      "n_trials_pruned": 0,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6585923159404525,
+        0.6961466690588032,
+        0.6945401443667434,
+        0.6756376464905386,
+        0.6333882440451343
+      ],
+      "cv_pr_auc": 0.6716610039803343
+    },
+    {
+      "model_name": "gradient_boosting__sqrt_balanced",
+      "family": "gradient_boosting",
+      "weighting": "sample_weight_sqrt_balanced",
+      "best_params": {
+        "subsample": 0.8858707768930936,
+        "n_estimators": 279,
+        "min_samples_leaf": 23,
+        "max_depth": 3,
+        "learning_rate": 0.013661017485290347
+      },
+      "cv_pr_auc_mean": 0.6713014506920265,
+      "cv_pr_auc_std": 0.027065577233799716,
+      "cv_roc_auc_mean": 0.8484410034358142,
+      "cv_roc_auc_std": 0.015256578292323674,
+      "validation_threshold": 0.34,
+      "validation_precision": 0.5031847133757962,
+      "validation_recall": 0.8449197860962567,
+      "validation_f1": 0.6307385229540918,
+      "validation_roc_auc": 0.8587524865018472,
+      "validation_pr_auc": 0.6773467062365509,
+      "validation_brier_score": 0.13712218938456391,
+      "validation_business_cost": 44600.0,
+      "validation_cost_per_customer": 31.653655074520938,
+      "validation_confusion": {
+        "true_positive": 316,
+        "false_positive": 312,
+        "true_negative": 723,
+        "false_negative": 58
+      },
+      "validation_mean_predicted": 0.34084739292418986,
+      "validation_calibration_gap": 0.07541091315130127,
+      "cost_at_default_threshold": 64650.0,
+      "cost_savings_vs_default": 20050.0,
+      "floor_binding": false,
+      "complexity": 20,
+      "is_dummy": false,
+      "notes": "",
+      "duration_seconds": 124.15,
+      "tuner": "randomized",
+      "n_trials_completed": 12,
+      "n_trials_pruned": 0,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.652755733179341,
+        0.6981007002353006,
+        0.7048617247437767,
+        0.6677164233702557,
+        0.6330726719314584
+      ],
+      "cv_pr_auc": 0.6713014506920265
+    },
+    {
+      "model_name": "xgboost__scale_pos_weight_1",
+      "family": "xgboost",
+      "weighting": "none",
+      "best_params": {
+        "n_estimators": 400,
+        "learning_rate": 0.0370130202908285,
+        "max_depth": 2,
+        "min_child_weight": 8,
+        "subsample": 0.6572436403919554,
+        "colsample_bytree": 0.816812204517226,
+        "gamma": 4.050118906269404e-06,
+        "reg_lambda": 7.847962965156833
+      },
+      "cv_pr_auc_mean": 0.6757582962442121,
+      "cv_pr_auc_std": 0.026780401989169485,
+      "cv_roc_auc_mean": 0.8493506990360427,
+      "cv_roc_auc_std": 0.015044384648962374,
+      "validation_threshold": 0.25,
+      "validation_precision": 0.5048543689320388,
+      "validation_recall": 0.8342245989304813,
+      "validation_f1": 0.6290322580645161,
+      "validation_roc_auc": 0.8594319150585136,
+      "validation_pr_auc": 0.6835349422340404,
+      "validation_brier_score": 0.12951761056478214,
+      "validation_business_cost": 46300.0,
+      "validation_cost_per_customer": 32.86018452803407,
+      "validation_confusion": {
+        "true_positive": 312,
+        "false_positive": 306,
+        "true_negative": 729,
+        "false_negative": 62
+      },
+      "validation_mean_predicted": 0.2671043763110365,
+      "validation_calibration_gap": 0.0016678965381479172,
+      "cost_at_default_threshold": 91550.0,
+      "cost_savings_vs_default": 45250.0,
+      "floor_binding": false,
+      "complexity": 40,
+      "is_dummy": false,
+      "notes": "Unweighted baseline (scale_pos_weight=1.0).",
+      "duration_seconds": 19.07,
+      "tuner": "optuna",
+      "n_trials_completed": 23,
+      "n_trials_pruned": 7,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6656624795680226,
+        0.7043298919301246,
+        0.703192202016035,
+        0.6735545899047659,
+        0.6320523178021121
+      ],
+      "cv_pr_auc": 0.6757582962442121
+    },
+    {
+      "model_name": "xgboost__scale_pos_weight_tuned",
+      "family": "xgboost",
+      "weighting": "scale_pos_weight_tuned",
+      "best_params": {
+        "n_estimators": 400,
+        "learning_rate": 0.030816017044468066,
+        "max_depth": 2,
+        "min_child_weight": 4,
+        "subsample": 0.7300733288106989,
+        "colsample_bytree": 0.8918424713352255,
+        "gamma": 0.0035163599046376553,
+        "reg_lambda": 27.293781650374736,
+        "scale_pos_weight": 0.8798929749689022
+      },
+      "cv_pr_auc_mean": 0.6763445428603936,
+      "cv_pr_auc_std": 0.029920975163174802,
+      "cv_roc_auc_mean": 0.8496669709180228,
+      "cv_roc_auc_std": 0.015469005521320446,
+      "validation_threshold": 0.23,
+      "validation_precision": 0.5115511551155115,
+      "validation_recall": 0.8288770053475936,
+      "validation_f1": 0.6326530612244898,
+      "validation_roc_auc": 0.8591826190291664,
+      "validation_pr_auc": 0.6817357399465718,
+      "validation_brier_score": 0.130074248989878,
+      "validation_business_cost": 46800.0,
+      "validation_cost_per_customer": 33.21504613200852,
+      "validation_confusion": {
+        "true_positive": 310,
+        "false_positive": 296,
+        "true_negative": 739,
+        "false_negative": 64
+      },
+      "validation_mean_predicted": 0.2502664173500463,
+      "validation_calibration_gap": -0.015170062422842301,
+      "cost_at_default_threshold": 101600.0,
+      "cost_savings_vs_default": 54800.0,
+      "floor_binding": false,
+      "complexity": 40,
+      "is_dummy": false,
+      "notes": "scale_pos_weight sampled log-uniform in [0.1, 10]; 1.0 reachable.",
+      "duration_seconds": 20.76,
+      "tuner": "optuna",
+      "n_trials_completed": 16,
+      "n_trials_pruned": 14,
+      "n_trials_failed": 0,
+      "fold_pr_auc": [
+        0.6577311435887098,
+        0.7138895850696046,
+        0.7060031516616962,
+        0.6702166345625813,
+        0.6338821994193757
+      ],
+      "cv_pr_auc": 0.6763445428603936
+    },
+    {
+      "model_name": "dummy__prior",
+      "family": "dummy_prior",
+      "weighting": "none",
+      "best_params": {
+        "strategy": "prior"
+      },
+      "cv_pr_auc_mean": NaN,
+      "cv_pr_auc_std": NaN,
+      "cv_roc_auc_mean": NaN,
+      "cv_roc_auc_std": NaN,
+      "validation_threshold": 0.26,
+      "validation_precision": 0.2654364797728886,
+      "validation_recall": 1.0,
+      "validation_f1": 0.4195176668536175,
+      "validation_roc_auc": 0.5,
+      "validation_pr_auc": 0.2654364797728886,
+      "validation_brier_score": 0.19497996730765563,
+      "validation_business_cost": 51750.0,
+      "validation_cost_per_customer": 36.72817601135557,
+      "validation_confusion": {
+        "true_positive": 374,
+        "false_positive": 1035,
+        "true_negative": 0,
+        "false_negative": 0
+      },
+      "validation_mean_predicted": 0.2653254437869822,
+      "validation_calibration_gap": -0.00011103598590639363,
+      "cost_at_default_threshold": 187000.0,
+      "cost_savings_vs_default": 135250.0,
+      "floor_binding": false,
+      "complexity": 0,
+      "is_dummy": true,
+      "notes": "no-skill reference model",
+      "duration_seconds": 0.0
+    },
+    {
+      "model_name": "dummy__most_frequent",
+      "family": "dummy_most_frequent",
+      "weighting": "none",
+      "best_params": {
+        "strategy": "most_frequent"
+      },
+      "cv_pr_auc_mean": NaN,
+      "cv_pr_auc_std": NaN,
+      "cv_roc_auc_mean": NaN,
+      "cv_roc_auc_std": NaN,
+      "validation_threshold": 0.99,
+      "validation_precision": 0.0,
+      "validation_recall": 0.0,
+      "validation_f1": 0.0,
+      "validation_roc_auc": 0.5,
+      "validation_pr_auc": 0.2654364797728886,
+      "validation_brier_score": 0.2654364797728886,
+      "validation_business_cost": 187000.0,
+      "validation_cost_per_customer": 132.71823988644428,
+      "validation_confusion": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "true_negative": 1035,
+        "false_negative": 374
+      },
+      "validation_mean_predicted": 0.0,
+      "validation_calibration_gap": -0.2654364797728886,
+      "cost_at_default_threshold": 187000.0,
+      "cost_savings_vs_default": 0.0,
+      "floor_binding": false,
+      "complexity": 0,
+      "is_dummy": true,
+      "notes": "no-skill reference model",
+      "duration_seconds": 0.0
+    }
+  ],
+  "trial_logs": {
+    "logistic_regression__none": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 22,
+        "n_trials_pruned": 8,
+        "n_trials_failed": 0,
+        "best_params": {
+          "penalty": "l1",
+          "C": 0.5618075481390491
+        },
+        "cv_pr_auc_mean": 0.663595744623562,
+        "cv_pr_auc_std": 0.044825285053199763,
+        "fold_pr_auc": [
+          0.645272954704033,
+          0.7247245704662754,
+          0.70343783830755,
+          0.644309418227687,
+          0.6002339414122645
+        ]
+      }
+    ],
+    "logistic_regression__balanced": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 18,
+        "n_trials_pruned": 12,
+        "n_trials_failed": 0,
+        "best_params": {
+          "penalty": "l1",
+          "C": 0.12875480499214478
+        },
+        "cv_pr_auc_mean": 0.6613295500748502,
+        "cv_pr_auc_std": 0.04587640628502795,
+        "fold_pr_auc": [
+          0.6395671343326216,
+          0.7280905970215285,
+          0.6992379770787737,
+          0.6388331324528427,
+          0.6009189094884848
+        ]
+      }
+    ],
+    "random_forest__none": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 12,
+        "n_trials_pruned": 3,
+        "n_trials_failed": 0,
+        "best_params": {
+          "max_depth": 18,
+          "n_estimators": 300,
+          "min_samples_split": 11,
+          "min_samples_leaf": 20,
+          "max_features": "sqrt"
+        },
+        "cv_pr_auc_mean": 0.6703106630730619,
+        "cv_pr_auc_std": 0.030471892716367247,
+        "fold_pr_auc": [
+          0.6443400931848355,
+          0.7094939997724442,
+          0.7019137620753134,
+          0.6625637340972595,
+          0.6332417262354572
+        ]
+      }
+    ],
+    "random_forest__balanced": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 13,
+        "n_trials_pruned": 2,
+        "n_trials_failed": 0,
+        "best_params": {
+          "max_depth": 13,
+          "n_estimators": 500,
+          "min_samples_split": 35,
+          "min_samples_leaf": 17,
+          "max_features": "sqrt"
+        },
+        "cv_pr_auc_mean": 0.6680878442309758,
+        "cv_pr_auc_std": 0.028940774200284156,
+        "fold_pr_auc": [
+          0.6452404619227865,
+          0.7015159696457689,
+          0.7010401422518977,
+          0.6623678626976451,
+          0.6302747846367804
+        ]
+      }
+    ],
+    "random_forest__balanced_subsample": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 12,
+        "n_trials_pruned": 3,
+        "n_trials_failed": 0,
+        "best_params": {
+          "max_depth": 24,
+          "n_estimators": 200,
+          "min_samples_split": 3,
+          "min_samples_leaf": 17,
+          "max_features": "sqrt"
+        },
+        "cv_pr_auc_mean": 0.6685496649677689,
+        "cv_pr_auc_std": 0.030715033633425974,
+        "fold_pr_auc": [
+          0.646371622904413,
+          0.7084542561403852,
+          0.7001175413423573,
+          0.6584166435295675,
+          0.6293882609221212
+        ]
+      }
+    ],
+    "gradient_boosting__none": [
+      {
+        "tuner": "randomized",
+        "n_trials_completed": 12,
+        "n_trials_pruned": 0,
+        "n_trials_failed": 0,
+        "best_params": {
+          "subsample": 0.8858707768930936,
+          "n_estimators": 279,
+          "min_samples_leaf": 23,
+          "max_depth": 3,
+          "learning_rate": 0.013661017485290347
+        },
+        "cv_pr_auc_mean": 0.671009091161668,
+        "cv_pr_auc_std": 0.027722581593092873,
+        "fold_pr_auc": [
+          0.65338117955979,
+          0.6967451286800311,
+          0.7060828631387547,
+          0.6682212419964625,
+          0.6306150424333017
+        ]
+      }
+    ],
+    "gradient_boosting__balanced": [
+      {
+        "tuner": "randomized",
+        "n_trials_completed": 12,
+        "n_trials_pruned": 0,
+        "n_trials_failed": 0,
+        "best_params": {
+          "subsample": 0.8027087299900162,
+          "n_estimators": 116,
+          "min_samples_leaf": 29,
+          "max_depth": 3,
+          "learning_rate": 0.07396047025243793
+        },
+        "cv_pr_auc_mean": 0.6716610039803343,
+        "cv_pr_auc_std": 0.023555938974921507,
+        "fold_pr_auc": [
+          0.6585923159404525,
+          0.6961466690588032,
+          0.6945401443667434,
+          0.6756376464905386,
+          0.6333882440451343
+        ]
+      }
+    ],
+    "gradient_boosting__sqrt_balanced": [
+      {
+        "tuner": "randomized",
+        "n_trials_completed": 12,
+        "n_trials_pruned": 0,
+        "n_trials_failed": 0,
+        "best_params": {
+          "subsample": 0.8858707768930936,
+          "n_estimators": 279,
+          "min_samples_leaf": 23,
+          "max_depth": 3,
+          "learning_rate": 0.013661017485290347
+        },
+        "cv_pr_auc_mean": 0.6713014506920265,
+        "cv_pr_auc_std": 0.027065577233799716,
+        "fold_pr_auc": [
+          0.652755733179341,
+          0.6981007002353006,
+          0.7048617247437767,
+          0.6677164233702557,
+          0.6330726719314584
+        ]
+      }
+    ],
+    "xgboost__scale_pos_weight_1": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 23,
+        "n_trials_pruned": 7,
+        "n_trials_failed": 0,
+        "best_params": {
+          "n_estimators": 400,
+          "learning_rate": 0.0370130202908285,
+          "max_depth": 2,
+          "min_child_weight": 8,
+          "subsample": 0.6572436403919554,
+          "colsample_bytree": 0.816812204517226,
+          "gamma": 4.050118906269404e-06,
+          "reg_lambda": 7.847962965156833
+        },
+        "cv_pr_auc_mean": 0.6757582962442121,
+        "cv_pr_auc_std": 0.026780401989169485,
+        "fold_pr_auc": [
+          0.6656624795680226,
+          0.7043298919301246,
+          0.703192202016035,
+          0.6735545899047659,
+          0.6320523178021121
+        ]
+      }
+    ],
+    "xgboost__scale_pos_weight_tuned": [
+      {
+        "tuner": "optuna",
+        "n_trials_completed": 16,
+        "n_trials_pruned": 14,
+        "n_trials_failed": 0,
+        "best_params": {
+          "n_estimators": 400,
+          "learning_rate": 0.030816017044468066,
+          "max_depth": 2,
+          "min_child_weight": 4,
+          "subsample": 0.7300733288106989,
+          "colsample_bytree": 0.8918424713352255,
+          "gamma": 0.0035163599046376553,
+          "reg_lambda": 27.293781650374736,
+          "scale_pos_weight": 0.8798929749689022
+        },
+        "cv_pr_auc_mean": 0.6763445428603936,
+        "cv_pr_auc_std": 0.029920975163174802,
+        "fold_pr_auc": [
+          0.6577311435887098,
+          0.7138895850696046,
+          0.7060031516616962,
+          0.6702166345625813,
+          0.6338821994193757
+        ]
+      }
+    ]
+  },
+  "audit": {
+    "policy": {
+      "min_pr_auc_above_prior": 0.02,
+      "min_recall": 0.1,
+      "cost_tie_tolerance": 0.0
+    },
+    "n_candidates": 12,
+    "n_eligible": 10,
+    "ranked_order": [
+      "random_forest__balanced_subsample",
+      "xgboost__scale_pos_weight_1",
+      "xgboost__scale_pos_weight_tuned",
+      "gradient_boosting__balanced",
+      "gradient_boosting__sqrt_balanced",
+      "logistic_regression__none",
+      "gradient_boosting__none",
+      "logistic_regression__balanced",
+      "random_forest__balanced",
+      "random_forest__none"
+    ],
+    "rejections": [
+      {
+        "model_name": "dummy__prior",
+        "reason": "baseline reference model (dummy), not selectable"
+      },
+      {
+        "model_name": "dummy__most_frequent",
+        "reason": "baseline reference model (dummy), not selectable"
+      }
+    ],
+    "winner": "random_forest__balanced_subsample",
+    "runner_up": "xgboost__scale_pos_weight_1",
+    "cost_margin_vs_runner_up": 5400.0
+  },
+  "calibration_decision": {
+    "apply": true,
+    "reason": "brier_score 0.1546 > 0.15; |calibration_gap| 0.1416 > 0.05",
+    "brier_score": 0.1545586364468571,
+    "calibration_gap": 0.14163578684368094,
+    "brier_threshold": 0.15,
+    "gap_threshold": 0.05
+  },
+  "registered": {
+    "registered_model_name": "telco_churn_classifier",
+    "version": "1",
+    "run_id": "648b5d38fbde48b2a5c4d20e6e05b8fb",
+    "model_uri": "models:/telco_churn_classifier/1",
+    "alias": "champion",
+    "decision_threshold": 0.44,
+    "metadata": {
+      "model_version": "phase3-random_forest__balanced_subsample",
+      "model_name": "random_forest__balanced_subsample",
+      "created_at_utc": "2026-11-19T07:44:04+00:00",
+      "sklearn_pipeline_steps": [
+        "coerce",
+        "preprocessor",
+        "model"
+      ],
+      "features": [
+        "tenure",
+        "MonthlyCharges",
+        "TotalCharges",
+        "gender",
+        "SeniorCitizen",
+        "Partner",
+        "Dependents",
+        "PhoneService",
+        "MultipleLines",
+        "InternetService",
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+        "Contract",
+        "PaperlessBilling",
+        "PaymentMethod"
+      ],
+      "numeric_features": [
+        "tenure",
+        "MonthlyCharges",
+        "TotalCharges"
+      ],
+      "categorical_features": [
+        "gender",
+        "SeniorCitizen",
+        "Partner",
+        "Dependents",
+        "PhoneService",
+        "MultipleLines",
+        "InternetService",
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+        "Contract",
+        "PaperlessBilling",
+        "PaymentMethod"
+      ],
+      "output_feature_count": 46,
+      "target": "Churn",
+      "training_stats": {
+        "imputer_medians": {
+          "tenure": 29.0,
+          "MonthlyCharges": 70.55,
+          "TotalCharges": 1373.625
+        },
+        "imputer_strategy": "median",
+        "fitted_on_rows": 4225,
+        "fitted_on_split": "train"
+      },
+      "decision_threshold": 0.44,
+      "metrics": {
+        "cv_pr_auc": 0.6685496649677689,
+        "validation_pr_auc": 0.6740104522537566,
+        "validation_roc_auc": 0.8597419204836084,
+        "validation_business_cost": 40900.0
+      },
+      "dataset_sha256": "16320c9c1ec72448db59aa0a26a0b95401046bef5d02fd3aeb906448e3055e91",
+      "training_rows": 4225,
+      "validation_rows": 1409,
+      "test_rows": 1409,
+      "risk_band_upper_bounds": [
+        [
+          0.3,
+          "Low"
+        ],
+        [
+          0.6,
+          "Medium"
+        ],
+        [
+          1.01,
+          "High"
+        ]
+      ],
+      "git_commit": "82f5105",
+      "notes": "Phase 3 champion. Selection rule: {'min_pr_auc_above_prior': 0.02, 'min_recall': 0.1, 'cost_tie_tolerance': 0.0}"
+    }
+  }
+}

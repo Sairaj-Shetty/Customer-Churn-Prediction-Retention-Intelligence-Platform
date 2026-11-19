@@ -1,0 +1,1315 @@
+{
+  "generated_at_utc": "2026-11-19T08:04:05+00:00",
+  "model_version": "phase4-calibrated-sigmoid",
+  "decision_threshold": 0.21,
+  "is_calibrated": true,
+  "output_space": "probability",
+  "split_used": "validation",
+  "test_split_used": false,
+  "global_sample_rows": 400,
+  "n_encoded_features": 46,
+  "n_parent_features": 19,
+  "grouping": [
+    {
+      "parent": "tenure",
+      "kind": "numeric",
+      "width": 1,
+      "encoded_columns": [
+        "tenure"
+      ]
+    },
+    {
+      "parent": "MonthlyCharges",
+      "kind": "numeric",
+      "width": 1,
+      "encoded_columns": [
+        "MonthlyCharges"
+      ]
+    },
+    {
+      "parent": "TotalCharges",
+      "kind": "numeric",
+      "width": 1,
+      "encoded_columns": [
+        "TotalCharges"
+      ]
+    },
+    {
+      "parent": "gender",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "gender_Female",
+        "gender_Male"
+      ]
+    },
+    {
+      "parent": "SeniorCitizen",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "SeniorCitizen_0",
+        "SeniorCitizen_1"
+      ]
+    },
+    {
+      "parent": "Partner",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "Partner_No",
+        "Partner_Yes"
+      ]
+    },
+    {
+      "parent": "Dependents",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "Dependents_No",
+        "Dependents_Yes"
+      ]
+    },
+    {
+      "parent": "PhoneService",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "PhoneService_No",
+        "PhoneService_Yes"
+      ]
+    },
+    {
+      "parent": "MultipleLines",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "MultipleLines_No",
+        "MultipleLines_No phone service",
+        "MultipleLines_Yes"
+      ]
+    },
+    {
+      "parent": "InternetService",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "InternetService_DSL",
+        "InternetService_Fiber optic",
+        "InternetService_No"
+      ]
+    },
+    {
+      "parent": "OnlineSecurity",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "OnlineSecurity_No",
+        "OnlineSecurity_No internet service",
+        "OnlineSecurity_Yes"
+      ]
+    },
+    {
+      "parent": "OnlineBackup",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "OnlineBackup_No",
+        "OnlineBackup_No internet service",
+        "OnlineBackup_Yes"
+      ]
+    },
+    {
+      "parent": "DeviceProtection",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "DeviceProtection_No",
+        "DeviceProtection_No internet service",
+        "DeviceProtection_Yes"
+      ]
+    },
+    {
+      "parent": "TechSupport",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "TechSupport_No",
+        "TechSupport_No internet service",
+        "TechSupport_Yes"
+      ]
+    },
+    {
+      "parent": "StreamingTV",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "StreamingTV_No",
+        "StreamingTV_No internet service",
+        "StreamingTV_Yes"
+      ]
+    },
+    {
+      "parent": "StreamingMovies",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "StreamingMovies_No",
+        "StreamingMovies_No internet service",
+        "StreamingMovies_Yes"
+      ]
+    },
+    {
+      "parent": "Contract",
+      "kind": "categorical",
+      "width": 3,
+      "encoded_columns": [
+        "Contract_Month-to-month",
+        "Contract_One year",
+        "Contract_Two year"
+      ]
+    },
+    {
+      "parent": "PaperlessBilling",
+      "kind": "categorical",
+      "width": 2,
+      "encoded_columns": [
+        "PaperlessBilling_No",
+        "PaperlessBilling_Yes"
+      ]
+    },
+    {
+      "parent": "PaymentMethod",
+      "kind": "categorical",
+      "width": 4,
+      "encoded_columns": [
+        "PaymentMethod_Bank transfer (automatic)",
+        "PaymentMethod_Credit card (automatic)",
+        "PaymentMethod_Electronic check",
+        "PaymentMethod_Mailed check"
+      ]
+    }
+  ],
+  "global_importance": [
+    {
+      "feature": "Contract",
+      "mean_abs_shap": 0.103181,
+      "mean_shap": -0.0159,
+      "rank": 1,
+      "kind": "categorical"
+    },
+    {
+      "feature": "InternetService",
+      "mean_abs_shap": 0.054657,
+      "mean_shap": -0.010021,
+      "rank": 2,
+      "kind": "categorical"
+    },
+    {
+      "feature": "tenure",
+      "mean_abs_shap": 0.047703,
+      "mean_shap": -0.014552,
+      "rank": 3,
+      "kind": "numeric"
+    },
+    {
+      "feature": "OnlineSecurity",
+      "mean_abs_shap": 0.046864,
+      "mean_shap": -0.007258,
+      "rank": 4,
+      "kind": "categorical"
+    },
+    {
+      "feature": "TechSupport",
+      "mean_abs_shap": 0.041645,
+      "mean_shap": -0.008279,
+      "rank": 5,
+      "kind": "categorical"
+    },
+    {
+      "feature": "TotalCharges",
+      "mean_abs_shap": 0.034244,
+      "mean_shap": -0.013207,
+      "rank": 6,
+      "kind": "numeric"
+    },
+    {
+      "feature": "PaymentMethod",
+      "mean_abs_shap": 0.025388,
+      "mean_shap": -0.006121,
+      "rank": 7,
+      "kind": "categorical"
+    },
+    {
+      "feature": "MonthlyCharges",
+      "mean_abs_shap": 0.017391,
+      "mean_shap": -0.009506,
+      "rank": 8,
+      "kind": "numeric"
+    },
+    {
+      "feature": "OnlineBackup",
+      "mean_abs_shap": 0.016194,
+      "mean_shap": -0.001883,
+      "rank": 9,
+      "kind": "categorical"
+    },
+    {
+      "feature": "PaperlessBilling",
+      "mean_abs_shap": 0.014514,
+      "mean_shap": -0.00067,
+      "rank": 10,
+      "kind": "categorical"
+    },
+    {
+      "feature": "DeviceProtection",
+      "mean_abs_shap": 0.012299,
+      "mean_shap": -0.001824,
+      "rank": 11,
+      "kind": "categorical"
+    },
+    {
+      "feature": "StreamingMovies",
+      "mean_abs_shap": 0.011536,
+      "mean_shap": -0.002185,
+      "rank": 12,
+      "kind": "categorical"
+    },
+    {
+      "feature": "Dependents",
+      "mean_abs_shap": 0.008775,
+      "mean_shap": -0.001201,
+      "rank": 13,
+      "kind": "categorical"
+    },
+    {
+      "feature": "StreamingTV",
+      "mean_abs_shap": 0.00875,
+      "mean_shap": -0.00143,
+      "rank": 14,
+      "kind": "categorical"
+    },
+    {
+      "feature": "Partner",
+      "mean_abs_shap": 0.007628,
+      "mean_shap": -0.001019,
+      "rank": 15,
+      "kind": "categorical"
+    },
+    {
+      "feature": "MultipleLines",
+      "mean_abs_shap": 0.004346,
+      "mean_shap": -0.001597,
+      "rank": 16,
+      "kind": "categorical"
+    },
+    {
+      "feature": "SeniorCitizen",
+      "mean_abs_shap": 0.003686,
+      "mean_shap": -0.000998,
+      "rank": 17,
+      "kind": "categorical"
+    },
+    {
+      "feature": "gender",
+      "mean_abs_shap": 0.002978,
+      "mean_shap": -0.000802,
+      "rank": 18,
+      "kind": "categorical"
+    },
+    {
+      "feature": "PhoneService",
+      "mean_abs_shap": 0.000839,
+      "mean_shap": -0.000291,
+      "rank": 19,
+      "kind": "categorical"
+    }
+  ],
+  "additivity": {
+    "max_abs_error": 1.8318679906315083e-15,
+    "verified": true,
+    "checks": [
+      {
+        "raw_score": 0.71919,
+        "baseline_plus_contributions": 0.71919,
+        "abs_error": 7.771561172376096e-16,
+        "churn_probability": 0.573264
+      },
+      {
+        "raw_score": 0.467019,
+        "baseline_plus_contributions": 0.467019,
+        "abs_error": 1.8318679906315083e-15,
+        "churn_probability": 0.236163
+      },
+      {
+        "raw_score": 0.335742,
+        "baseline_plus_contributions": 0.335742,
+        "abs_error": 1.1657341758564144e-15,
+        "churn_probability": 0.122393
+      },
+      {
+        "raw_score": 0.890036,
+        "baseline_plus_contributions": 0.890036,
+        "abs_error": 1.2212453270876722e-15,
+        "churn_probability": 0.74985
+      },
+      {
+        "raw_score": 0.476629,
+        "baseline_plus_contributions": 0.476629,
+        "abs_error": 1.1102230246251565e-15,
+        "churn_probability": 0.269823
+      }
+    ]
+  },
+  "examples": [
+    {
+      "churn_probability": 0.573264,
+      "raw_score": 0.71919,
+      "baseline_raw_score": 0.5,
+      "predicted_class": 1,
+      "threshold": 0.21,
+      "summary": "This customer has moderate predicted churn risk (57.3%). Model risk increases are associated mainly with contract type of Month-to-month, subscription tenure (2 months), and total charges to date of \u20b938.45. Model risk reductions come mainly from internet service type of Fiber optic, monthly charges of \u20b924.30, and paperless billing of Yes.",
+      "top_increasing": [
+        {
+          "feature": "Contract",
+          "contribution": 0.074191,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": 0.065866,
+          "value": 2.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": 0.055366,
+          "value": 38.45,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.044334,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.038547,
+          "value": "No",
+          "direction": "increases_risk"
+        }
+      ],
+      "top_decreasing": [
+        {
+          "feature": "InternetService",
+          "contribution": -0.052356,
+          "value": "Fiber optic",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": -0.023305,
+          "value": 24.3,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.02257,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": -0.016839,
+          "value": "Electronic check",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.003454,
+          "value": "1",
+          "direction": "decreases_risk"
+        }
+      ],
+      "contributions": [
+        {
+          "feature": "Contract",
+          "contribution": 0.074191,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": 0.065866,
+          "value": 2.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": 0.055366,
+          "value": 38.45,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": -0.052356,
+          "value": "Fiber optic",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.044334,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.038547,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": -0.023305,
+          "value": 24.3,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.02257,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": 0.019032,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": -0.016839,
+          "value": "Electronic check",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.013069,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": 0.006153,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PhoneService",
+          "contribution": 0.005729,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Partner",
+          "contribution": 0.005572,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": 0.00448,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MultipleLines",
+          "contribution": 0.004452,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.003454,
+          "value": "1",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "StreamingMovies",
+          "contribution": 0.002714,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": -0.001789,
+          "value": "Female",
+          "direction": "decreases_risk"
+        }
+      ],
+      "disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome.",
+      "additivity_note": "SHAP values are additive in the RAW model probability before calibration: raw_score = baseline_raw_score + sum(contributions). The reported churn_probability is the calibrated probability, a monotone transform of that raw score. Contribution directions still apply, but these values do not sum to churn_probability minus the calibrated baseline.",
+      "output_space": "probability",
+      "validated_churn": 0
+    },
+    {
+      "churn_probability": 0.236163,
+      "raw_score": 0.467019,
+      "baseline_raw_score": 0.5,
+      "predicted_class": 1,
+      "threshold": 0.21,
+      "summary": "This customer has low predicted churn risk (23.6%). Model risk increases are associated mainly with contract type of Month-to-month, internet service type of Fiber optic, and tech support add-on of No. Model risk reductions come mainly from subscription tenure (70 months), online security add-on of No, and total charges to date of \u20b97,554.05.",
+      "top_increasing": [
+        {
+          "feature": "Contract",
+          "contribution": 0.078888,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.045842,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.038659,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": 0.022119,
+          "value": "Electronic check",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": 0.015729,
+          "value": 106.05,
+          "direction": "increases_risk"
+        }
+      ],
+      "top_decreasing": [
+        {
+          "feature": "tenure",
+          "contribution": -0.090631,
+          "value": 70.0,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": -0.074228,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": -0.064861,
+          "value": 7554.05,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": -0.024963,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": -0.011815,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        }
+      ],
+      "contributions": [
+        {
+          "feature": "tenure",
+          "contribution": -0.090631,
+          "value": 70.0,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "Contract",
+          "contribution": 0.078888,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": -0.074228,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": -0.064861,
+          "value": 7554.05,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.045842,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.038659,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": -0.024963,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": 0.022119,
+          "value": "Electronic check",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": 0.015729,
+          "value": 106.05,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": -0.011815,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": 0.011468,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingMovies",
+          "contribution": 0.010201,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": 0.010032,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.00835,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Partner",
+          "contribution": -0.006266,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.003711,
+          "value": "1",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MultipleLines",
+          "contribution": 0.00272,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": -0.000424,
+          "value": "Female",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PhoneService",
+          "contribution": -8.9e-05,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        }
+      ],
+      "disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome.",
+      "additivity_note": "SHAP values are additive in the RAW model probability before calibration: raw_score = baseline_raw_score + sum(contributions). The reported churn_probability is the calibrated probability, a monotone transform of that raw score. Contribution directions still apply, but these values do not sum to churn_probability minus the calibrated baseline.",
+      "output_space": "probability",
+      "validated_churn": 0
+    },
+    {
+      "churn_probability": 0.122393,
+      "raw_score": 0.335742,
+      "baseline_raw_score": 0.5,
+      "predicted_class": 0,
+      "threshold": 0.21,
+      "summary": "This customer has low predicted churn risk (12.2%). Model risk increases are associated mainly with subscription tenure (7 months), payment method of Electronic check, and tech support add-on of No. Model risk reductions come mainly from contract type of Month-to-month, online security add-on of No, and internet service type of Fiber optic.",
+      "top_increasing": [
+        {
+          "feature": "tenure",
+          "contribution": 0.038371,
+          "value": 7.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": 0.033292,
+          "value": "Electronic check",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.027347,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": 0.019219,
+          "value": 477.05,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": 0.009626,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        }
+      ],
+      "top_decreasing": [
+        {
+          "feature": "Contract",
+          "contribution": -0.101716,
+          "value": "Month-to-month",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": -0.056498,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": -0.055805,
+          "value": "Fiber optic",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.023136,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": -0.017221,
+          "value": 69.45,
+          "direction": "decreases_risk"
+        }
+      ],
+      "contributions": [
+        {
+          "feature": "Contract",
+          "contribution": -0.101716,
+          "value": "Month-to-month",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": -0.056498,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": -0.055805,
+          "value": "Fiber optic",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": 0.038371,
+          "value": 7.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": 0.033292,
+          "value": "Electronic check",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.027347,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.023136,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": 0.019219,
+          "value": 477.05,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": -0.017221,
+          "value": 69.45,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": -0.016839,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": -0.010982,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": 0.009626,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Partner",
+          "contribution": -0.005407,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.002872,
+          "value": "1",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MultipleLines",
+          "contribution": -0.00242,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.002168,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingMovies",
+          "contribution": -0.001139,
+          "value": "No internet service",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PhoneService",
+          "contribution": -0.000529,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": 0.000285,
+          "value": "Male",
+          "direction": "increases_risk"
+        }
+      ],
+      "disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome.",
+      "additivity_note": "SHAP values are additive in the RAW model probability before calibration: raw_score = baseline_raw_score + sum(contributions). The reported churn_probability is the calibrated probability, a monotone transform of that raw score. Contribution directions still apply, but these values do not sum to churn_probability minus the calibrated baseline.",
+      "output_space": "probability",
+      "validated_churn": 0
+    },
+    {
+      "churn_probability": 0.74985,
+      "raw_score": 0.890036,
+      "baseline_raw_score": 0.5,
+      "predicted_class": 1,
+      "threshold": 0.21,
+      "summary": "This customer has high predicted churn risk (75.0%). Model risk increases are associated mainly with contract type of Month-to-month, internet service type of Fiber optic, and online security add-on of No. Model risk reductions come mainly from senior citizen status of not a senior citizen and gender of Female.",
+      "top_increasing": [
+        {
+          "feature": "Contract",
+          "contribution": 0.078802,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.062097,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.04527,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": 0.041585,
+          "value": 9.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.037361,
+          "value": "No",
+          "direction": "increases_risk"
+        }
+      ],
+      "top_decreasing": [
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.002645,
+          "value": "0",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": -0.001544,
+          "value": "Female",
+          "direction": "decreases_risk"
+        }
+      ],
+      "contributions": [
+        {
+          "feature": "Contract",
+          "contribution": 0.078802,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.062097,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.04527,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": 0.041585,
+          "value": 9.0,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": 0.037361,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": 0.030046,
+          "value": "Electronic check",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": 0.022289,
+          "value": 724.65,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": 0.017125,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.014417,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": 0.013819,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MultipleLines",
+          "contribution": 0.011694,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Partner",
+          "contribution": 0.00662,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": 0.005697,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": 0.005527,
+          "value": 75.85,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.002645,
+          "value": "0",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": -0.001544,
+          "value": "Female",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "StreamingMovies",
+          "contribution": 0.001229,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": 0.000643,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PhoneService",
+          "contribution": 3e-06,
+          "value": "Yes",
+          "direction": "increases_risk"
+        }
+      ],
+      "disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome.",
+      "additivity_note": "SHAP values are additive in the RAW model probability before calibration: raw_score = baseline_raw_score + sum(contributions). The reported churn_probability is the calibrated probability, a monotone transform of that raw score. Contribution directions still apply, but these values do not sum to churn_probability minus the calibrated baseline.",
+      "output_space": "probability",
+      "validated_churn": 0
+    },
+    {
+      "churn_probability": 0.269823,
+      "raw_score": 0.476629,
+      "baseline_raw_score": 0.5,
+      "predicted_class": 1,
+      "threshold": 0.21,
+      "summary": "This customer has low predicted churn risk (27.0%). Model risk increases are associated mainly with contract type of Month-to-month, internet service type of Fiber optic, and online security add-on of No. Model risk reductions come mainly from tech support add-on of No, payment method of Electronic check, and subscription tenure (26 months).",
+      "top_increasing": [
+        {
+          "feature": "Contract",
+          "contribution": 0.078084,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.052905,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.02897,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.015487,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": 0.014339,
+          "value": "No",
+          "direction": "increases_risk"
+        }
+      ],
+      "top_decreasing": [
+        {
+          "feature": "TechSupport",
+          "contribution": -0.06542,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": -0.041633,
+          "value": "Electronic check",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": -0.041473,
+          "value": 26.0,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": -0.036904,
+          "value": 2196.45,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.025424,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        }
+      ],
+      "contributions": [
+        {
+          "feature": "Contract",
+          "contribution": 0.078084,
+          "value": "Month-to-month",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "TechSupport",
+          "contribution": -0.06542,
+          "value": "No",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "InternetService",
+          "contribution": 0.052905,
+          "value": "Fiber optic",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaymentMethod",
+          "contribution": -0.041633,
+          "value": "Electronic check",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "tenure",
+          "contribution": -0.041473,
+          "value": 26.0,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "TotalCharges",
+          "contribution": -0.036904,
+          "value": 2196.45,
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "OnlineSecurity",
+          "contribution": 0.02897,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PaperlessBilling",
+          "contribution": -0.025424,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "DeviceProtection",
+          "contribution": 0.015487,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "OnlineBackup",
+          "contribution": 0.014339,
+          "value": "No",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingMovies",
+          "contribution": 0.014002,
+          "value": "No internet service",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "Partner",
+          "contribution": -0.008816,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MultipleLines",
+          "contribution": -0.007606,
+          "value": "Yes",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "SeniorCitizen",
+          "contribution": -0.003817,
+          "value": "1",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "Dependents",
+          "contribution": 0.00293,
+          "value": "Yes",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "gender",
+          "contribution": 0.002405,
+          "value": "Female",
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "StreamingTV",
+          "contribution": -0.002031,
+          "value": "No internet service",
+          "direction": "decreases_risk"
+        },
+        {
+          "feature": "MonthlyCharges",
+          "contribution": 0.000765,
+          "value": 85.9,
+          "direction": "increases_risk"
+        },
+        {
+          "feature": "PhoneService",
+          "contribution": -0.000134,
+          "value": "No",
+          "direction": "decreases_risk"
+        }
+      ],
+      "disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome.",
+      "additivity_note": "SHAP values are additive in the RAW model probability before calibration: raw_score = baseline_raw_score + sum(contributions). The reported churn_probability is the calibrated probability, a monotone transform of that raw score. Contribution directions still apply, but these values do not sum to churn_probability minus the calibrated baseline.",
+      "output_space": "probability",
+      "validated_churn": 0
+    }
+  ],
+  "showcase_index": 3,
+  "figures": {
+    "global_importance": "reports/figures/shap_global_importance.png",
+    "waterfall": "reports/figures/shap_waterfall_customer0.png",
+    "calibration_curves": "reports/figures/calibration_curves.png"
+  },
+  "causation_disclaimer": "SHAP values describe how the model behaves on data like this, not causal effects. They show which factors the model associates with higher or lower churn risk; they do not prove that changing a factor would change the outcome."
+}

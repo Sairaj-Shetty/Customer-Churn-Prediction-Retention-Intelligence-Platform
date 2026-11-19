@@ -1,0 +1,80 @@
+# Phase 3 — model training, tuning and selection configuration.
+# Non-secret, version controlled. Override any value with CHURN_* env vars.
+
+# --------------------------------------------------------------------------- #
+# Business cost matrix (currency units per customer, on the validation set)
+# --------------------------------------------------------------------------- #
+# A missed churner (FN) costs a lost customer's future revenue.
+# A wasted retention offer (FP) costs one discount.
+# TP and TN are free.
+cost:
+  false_negative: 500.0
+  false_positive: 50.0
+  true_positive: 0.0
+  true_negative: 0.0
+
+# --------------------------------------------------------------------------- #
+# Threshold optimisation
+# --------------------------------------------------------------------------- #
+threshold:
+  min: 0.01
+  max: 0.99
+  step: 0.01
+  # Guards against the degenerate "flag everyone" solution that minimises raw
+  # cost by giving every customer a discount.
+  precision_floor: 0.50
+  # Width of the band used to report cost sensitivity around the optimum.
+  sensitivity_band: 0.05
+
+# --------------------------------------------------------------------------- #
+# Search budget (trimmed per project decision)
+# --------------------------------------------------------------------------- #
+search:
+  random_state: 42
+  cv_folds: 5
+  n_trials:
+    logistic_regression: 30
+    random_forest: 15
+    gradient_boosting: 12
+    xgboost: 30
+  # MedianPruner: kill a trial whose fold-mean trails the median of completed
+  # trials by more than n_startup_trials.
+  pruner:
+    n_startup_trials: 5
+    n_warmup_steps: 2
+
+# --------------------------------------------------------------------------- #
+# Selection rule — evaluated in this exact order
+# --------------------------------------------------------------------------- #
+selection:
+  # Gate: must beat these dummies or it is ineligible.
+  gate:
+    min_pr_auc_above_prior: 0.02   # absolute improvement over the `prior` dummy
+    min_recall: 0.10               # must beat `most_frequent` (which has recall 0)
+  # Primary ordering key.
+  primary: validation_business_cost
+  # Tie-breakers applied only when costs are within `cost_tie_tolerance`.
+  cost_tie_tolerance: 0.0
+  tie_breakers:
+    - pr_auc
+    - brier_score
+    - complexity
+
+# --------------------------------------------------------------------------- #
+# Conditional calibration — pre-registered rule (decided BEFORE seeing the winner)
+# --------------------------------------------------------------------------- #
+calibration:
+  enabled: true
+  method: isotonic          # CalibratedClassifierCV(method="isotonic", cv="prefit"-style folds)
+  # Calibrate only if the winning model is non-trivially miscalibrated.
+  apply_if:
+    brier_score_above: 0.15
+    mean_predicted_gap_above: 0.05
+
+# --------------------------------------------------------------------------- #
+# Modelling constants
+# --------------------------------------------------------------------------- #
+modelling:
+  random_state: 42
+  # Feature scaling is required for Logistic Regression; harmless for trees.
+  scale_numeric: true

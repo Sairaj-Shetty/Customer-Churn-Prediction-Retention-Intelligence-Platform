@@ -1,0 +1,46 @@
+# Project configuration — non-secret, version controlled.
+# Any value here can be overridden by an environment variable using the
+# pattern CHURN_<SECTION>__<FIELD>, e.g. CHURN_MODEL__CV_FOLDS=10
+# Secrets (DB URLs with passwords, AWS keys) belong in the environment only.
+
+environment: local
+log_level: INFO
+seed: 42
+
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  filename: Telco-Customer-Churn.csv
+  # 60 / 20 / 20 stratified split.
+  test_size: 0.20
+  val_size: 0.20
+  random_state: 42
+
+model:
+  # Accuracy is deliberately NOT an option: a "nobody churns" model scores
+  # 73.5% accuracy on this data while being worthless.
+  primary_metric: pr_auc
+  cv_folds: 5
+  n_iter_random_search: 30
+  n_trials_optuna: 40
+  optuna_timeout_seconds: 900
+  # Business cost matrix (per customer) for threshold optimisation.
+  cost_false_negative: 500.0   # lost customer = lost future revenue
+  cost_false_positive: 50.0    # one wasted retention offer
+  precision_floor: 0.50
+
+mlflow:
+  tracking_uri: sqlite:///mlflow.db
+  experiment_name: telco-churn
+  registered_model_name: telco_churn_classifier
+  champion_alias: champion
+
+api:
+  model_dir: artifacts/model            # frozen phase-3 champion (test evaluation)
+  serving_model_dir: artifacts/model_calibrated   # calibrated model served to users
+  title: Churn Prediction API
+  version: 0.1.0
+  max_batch_size: 1000
+  cors_origins:
+    - "*"
