@@ -1,0 +1,34 @@
+{
+  "immutable": true,
+  "evaluated_at_utc": "2026-11-19T07:44:32+00:00",
+  "selection_record_sha256": "d108ed5275e42d7e21932940cda9aac7f75dc4cbcb94fed00eb5e549d5aec4ae",
+  "selected_model": "random_forest__balanced_subsample",
+  "threshold": 0.44,
+  "n_test_rows": 1409,
+  "test_positive_rate": 0.2654364797728886,
+  "metrics": {
+    "accuracy": 0.7253371185237757,
+    "precision": 0.4897959183673469,
+    "recall": 0.8342245989304813,
+    "f1": 0.6172106824925816,
+    "roc_auc": 0.8321992301531944,
+    "pr_auc": 0.6241333014085234,
+    "brier_score": 0.16506081240119103,
+    "business_cost": 47250.0,
+    "cost_per_customer": 33.53442157558552
+  },
+  "confusion_matrix": {
+    "true_positive": 312,
+    "false_positive": 325,
+    "true_negative": 710,
+    "false_negative": 62
+  },
+  "validation_reference": {
+    "pr_auc": 0.6740104522537566,
+    "business_cost": 40900.0
+  },
+  "generalisation_gap": {
+    "pr_auc_delta": -0.04987715084523314,
+    "cost_delta": 6350.0
+  }
+}

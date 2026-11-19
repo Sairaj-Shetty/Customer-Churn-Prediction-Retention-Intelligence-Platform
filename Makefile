@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PIP ?= $(PY) -m pip
 
-.PHONY: help install data validate split train evaluate mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
+.PHONY: help install data validate split train train-quick evaluate-test mlflow-ui api dashboard test lint fmt typecheck clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -24,8 +24,14 @@ validate:  ## Phase 2: run the data validation contract
 split:  ## Phase 2: coerce dtypes then split 60/20/20 (NaN preserved)
 	$(PY) -m churn.data.split
 
-train:  ## Phase 4-6: split, train, tune, evaluate, log to MLflow
-	$(PY) -m churn.models.train
+train:  ## Phase 3: tune 10 configs, select on validation, freeze. Logs to MLflow
+	$(PY) -m churn.models.run_phase3
+
+train-quick:  ## Phase 3 with a tiny budget (smoke test / CI)
+	$(PY) -m churn.models.run_phase3 --quick --no-mlflow
+
+evaluate-test:  ## Phase 3: one-shot held-out test evaluation (requires a freeze)
+	$(PY) -m churn.models.evaluate_test
 
 mlflow-ui:  ## Open the MLflow tracking UI
 	$(PY) -m mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000

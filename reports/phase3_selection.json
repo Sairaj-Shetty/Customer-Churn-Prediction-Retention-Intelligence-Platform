@@ -1,0 +1,62 @@
+{
+  "frozen_at_utc": "2026-11-19T07:44:10+00:00",
+  "dataset_sha256": "16320c9c1ec72448db59aa0a26a0b95401046bef5d02fd3aeb906448e3055e91",
+  "selected_model": "random_forest__balanced_subsample",
+  "family": "random_forest",
+  "weighting": "balanced_subsample",
+  "best_params": {
+    "max_depth": 24,
+    "n_estimators": 200,
+    "min_samples_split": 3,
+    "min_samples_leaf": 17,
+    "max_features": "sqrt"
+  },
+  "decision_threshold": 0.44,
+  "selection_uses": "validation split only",
+  "validation_business_cost": 40900.0,
+  "validation_pr_auc": 0.6740104522537566,
+  "validation_brier_score": 0.1545586364468571,
+  "calibration": {
+    "apply": true,
+    "reason": "brier_score 0.1546 > 0.15; |calibration_gap| 0.1416 > 0.05",
+    "brier_score": 0.1545586364468571,
+    "calibration_gap": 0.14163578684368094,
+    "brier_threshold": 0.15,
+    "gap_threshold": 0.05
+  },
+  "audit": {
+    "policy": {
+      "min_pr_auc_above_prior": 0.02,
+      "min_recall": 0.1,
+      "cost_tie_tolerance": 0.0
+    },
+    "n_candidates": 12,
+    "n_eligible": 10,
+    "ranked_order": [
+      "random_forest__balanced_subsample",
+      "xgboost__scale_pos_weight_1",
+      "xgboost__scale_pos_weight_tuned",
+      "gradient_boosting__balanced",
+      "gradient_boosting__sqrt_balanced",
+      "logistic_regression__none",
+      "gradient_boosting__none",
+      "logistic_regression__balanced",
+      "random_forest__balanced",
+      "random_forest__none"
+    ],
+    "rejections": [
+      {
+        "model_name": "dummy__prior",
+        "reason": "baseline reference model (dummy), not selectable"
+      },
+      {
+        "model_name": "dummy__most_frequent",
+        "reason": "baseline reference model (dummy), not selectable"
+      }
+    ],
+    "winner": "random_forest__balanced_subsample",
+    "runner_up": "xgboost__scale_pos_weight_1",
+    "cost_margin_vs_runner_up": 5400.0
+  },
+  "record_sha256": "d108ed5275e42d7e21932940cda9aac7f75dc4cbcb94fed00eb5e549d5aec4ae"
+}

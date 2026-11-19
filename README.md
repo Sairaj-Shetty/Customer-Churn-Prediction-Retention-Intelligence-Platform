@@ -1,8 +1,8 @@
 # Customer Churn Prediction & Retention Intelligence Platform
 
-> **Status: Phases 0–2 complete.** Scaffold, configuration, structured logging,
-> verified data acquisition, EDA, validation contract, leakage-safe splitting
-> and the preprocessing pipeline are implemented and tested (108 tests). Modelling, API, dashboard and
+> **Status: Phases 0–3 complete.** Data pipeline, preprocessing, multi-model
+training with Optuna/RandomizedSearch tuning, MLflow tracking + registry, and
+> leakage-proof model selection are implemented and tested (216 tests). Modelling, API, dashboard and
 > deployment follow in later phases — see the [roadmap](#roadmap).
 
 An end-to-end ML engineering project on the **IBM Telco Customer Churn** dataset:
@@ -229,9 +229,9 @@ make typecheck   # mypy
 Current status:
 
 ```
-108 passed
+216 passed (1 slow deselected)
 ruff: All checks passed!
-mypy: Success: no issues found
+mypy: Success: no issues found in 20 source files
 ```
 
 Coverage includes: checksum verification and tamper rejection, download-failure
@@ -356,6 +356,60 @@ Note: NaNs are preserved by design — imputation happens inside the pipeline.
 
 ---
 
+## Model results (Phase 3)
+
+Full analysis: **[docs/03_PHASE3_RESULTS.md](docs/03_PHASE3_RESULTS.md)** and
+**[docs/02_PHASE3_PLAN.md](docs/02_PHASE3_PLAN.md)**.
+
+12 configurations were trained (10 tuned + 2 no-skill dummies) with stratified
+5-fold CV on the training split, scored on validation, and the winner was frozen
+before the test set was opened.
+
+### Validation leaderboard (top 5 of 12, by business cost)
+
+| Configuration | CV PR-AUC | Val PR-AUC | Precision | Recall | Brier | Business cost | Threshold |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **random_forest__balanced_subsample** ⭐ | 0.6685 | 0.6740 | 0.505 | 0.866 | 0.1546 | **40,900** | 0.44 |
+| random_forest__balanced | 0.6681 | 0.6712 | 0.501 | 0.861 | 0.1550 | 42,050 | 0.43 |
+| random_forest__none | 0.6703 | 0.6707 | 0.507 | 0.853 | 0.1319 | 43,000 | 0.25 |
+| gradient_boosting__none | 0.6710 | 0.6753 | 0.504 | 0.850 | 0.1310 | 43,650 | 0.23 |
+| gradient_boosting__balanced | 0.6717 | 0.6809 | 0.502 | 0.848 | 0.1580 | 44,200 | 0.45 |
+
+### Held-out test result (evaluated once, after the freeze)
+
+| Metric | Value |
+|---|---|
+| PR-AUC | **0.6241** |
+| ROC-AUC | 0.8322 |
+| Precision / Recall / F1 | 0.4898 / **0.8342** / 0.6172 |
+| Accuracy | 0.7253 |
+| Business cost | **47,250** |
+| Confusion | TP=312 FP=325 TN=710 FN=62 |
+
+Validation → test: PR-AUC **−0.0499**, cost **+15.5%**. Reported as-is; the
+selection protocol forbids retuning after seeing test results.
+
+### The central finding: accuracy is actively misleading
+
+| Model | Accuracy | Recall | Business cost |
+|---|---:|---:|---:|
+| Champion (threshold 0.44) | **0.7253** | 0.8342 | 47,250 |
+| Predict "nobody churns" | **0.7346** | 0.0000 | 187,000 |
+
+The champion has **lower accuracy** than doing nothing, and saves **139,750** in
+expected cost. Selecting on accuracy would have shipped a model that never
+flags a single churner.
+
+### Class weighting: measured, not assumed
+
+Weighting was tuned independently per family. Result: it is **not a major lever**
+on this dataset (costs differ ~2%), and it **consistently worsens calibration**
+(Brier 0.155–0.164 vs 0.130–0.132). XGBoost's tuned `scale_pos_weight`
+independently converged near **1.0**, rediscovering the unweighted baseline
+rather than the textbook `neg/pos ≈ 2.77`.
+
+---
+
 ## Roadmap
 
 | Phase | Scope | Status |
@@ -363,10 +417,8 @@ Note: NaNs are preserved by design — imputation happens inside the pipeline.
 | 0 | Scaffold, config, logging, lint/test tooling | ✅ done |
 | 1 | Data acquisition, EDA, DVC, data card | ✅ done |
 | 2 | Validation contract, splitting, preprocessing pipeline, artifact | ✅ done |
-| 3 | Model training + hyperparameter tuning | next |
-| 4 | Multi-model training, tuning, threshold optimisation | planned |
-| 5 | Evaluation and justified model selection | planned |
-| 6 | MLflow tracking + model registry | planned |
+| 3 | 4 models × weighting variants, Optuna/RandomizedSearch, threshold optimisation, MLflow tracking + registry, frozen selection | ✅ done |
+| 4 | SHAP explainability | next |
 | 7 | SHAP global/local explainability | planned |
 | 8 | FastAPI backend (6 endpoints) | planned |
 | 9 | PostgreSQL persistence | planned |
