@@ -21,6 +21,9 @@ docs/
 reports/
 notebooks/
 
-# Model artifacts: only the calibrated one ships.
+# Model artifacts: only what serving needs ships.
+# `artifacts/monitoring/` carries the frozen drift schema; without it the API
+# silently records no drift observations.
 artifacts/*
 !artifacts/model_calibrated/
+!artifacts/monitoring/

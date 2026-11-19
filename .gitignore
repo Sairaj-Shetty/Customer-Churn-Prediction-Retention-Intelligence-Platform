@@ -43,7 +43,6 @@ artifacts/*
 # Generated drift reports are build output, not source.
 reports/drift/drift_*.json
 reports/drift/drift_*.md
-models/
 *.pkl
 *.joblib
 !artifacts/model_calibrated/pipeline.joblib
@@ -61,6 +60,17 @@ predictions.db
 mlruns/
 mlartifacts/
 mlflow.db
+
+# ---------------- Trained model output (NOT the package) ---------------- #
+# Deliberately anchored with a leading `/` so it matches only the repository-root
+# `models/` output directory.
+#
+# An unanchored `models/` was here previously and silently excluded
+# `src/churn/models/` — the entire training, calibration and selection package —
+# from every commit, because a bare directory pattern matches at any depth. The
+# package existed only as untracked files on one machine; it was unrecoverable
+# when that checkout was lost. Keep the leading slash.
+/models/
 
 # ---------------- Secrets / env ----------------
 .env

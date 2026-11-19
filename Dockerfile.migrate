@@ -1,0 +1,31 @@
+# Migration image: applies Alembic migrations and then exits.
+#
+# Why a separate image rather than "run alembic at API start"
+# -----------------------------------------------------------
+# * Several API replicas would race each other through the same migration.
+# * A failed migration would take down serving instead of failing one explicit
+#   step that a human can read.
+# * `alembic upgrade head` needs the source tree and config, which the runtime API
+#   image deliberately does not need on its own filesystem.
+#
+# The API container itself never creates or alters tables.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN pip install --upgrade pip && pip install -e ".[api]"
+
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
+COPY configs/ ./configs/
+
+# No default DATABASE_URL: the caller must supply one, so a forgotten variable
+# fails loudly instead of silently migrating a throwaway SQLite file.
+ENTRYPOINT ["alembic"]
+CMD ["upgrade", "head"]

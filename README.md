@@ -826,18 +826,50 @@ several popular "free" tiers do not support this workload.
 
 | Provider | What the free tier actually gives | Consequence for this project |
 |---|---|---|
-| **GitHub Actions** | *Unlimited* minutes on **public** repos; private repos get 2,000 Linux min/month | Keep the repo **public**. CI is then free without quota anxiety. |
-| **Render — Web Service** | 512 MB RAM, 0.1 CPU, **750 instance-hours/month**, spins down after **15 min** idle (~60 s cold start), **no persistent disk**, 5 GB bandwidth | Workable for the API **only** with 1 worker and no reliance on local files. Cold starts are unavoidable. |
+| **GitHub Actions** | Standard runners on **public** repos are **free and do not draw on included compute usage** | Keep the repo **public**. CI is then free without quota anxiety. |
+| **Render — Web Service** | 512 MB RAM, 0.1 CPU, **750 instance-hours/month**, spins down after **15 min** idle (~60 s cold start), **no persistent disk**, **5 GB/month outbound bandwidth** | Workable for the API **only** with 1 worker and no reliance on local files. Cold starts are unavoidable. **Add no payment method** — see the billing warning below. |
 | **Render — Postgres** | **Expires 30 days after creation**, deleted 14 days later, no backups | ❌ **Rejected.** Cannot satisfy a persistence requirement. |
-| **Neon — Postgres** | 100 CU-hours/project/month, **1 GB** storage (some docs say 0.5 GB), 5 GB egress, **scale-to-zero after 5 min** (cannot be disabled), no card, no expiry | ✅ The viable choice for prediction records. Accept ~0.5 s cold query. |
-| **Streamlit Community Cloud** | Free, unlimited public apps, ~1–2.7 GB RAM (docs conflict), **sleeps after 12 h** idle, no custom domain, requires a **public** repo | ✅ Viable frontend. Cold start 10–30 s. |
+| **Neon — Postgres** | 100 CU-hours/project/month, **1 GB** storage/project (20 GB account-wide), **5 GB** network transfer/project, **scale-to-zero after 5 min** (cannot be disabled on Free), no card, no expiry. **Free plan does not bill overages** | ✅ The viable choice for prediction records. Accept ~0.5 s cold query. |
+| **Streamlit Community Cloud** | Free, unlimited public apps, **690 MB–2.7 GB RAM / 0.078–2 cores**, **hibernates after 12 h** with no traffic (visitor must click to wake), no custom domain, requires a **public** repo, `showErrorDetails` forced off | ✅ Viable frontend. Cold start 10–30 s. |
 | **Hugging Face Spaces** | Free CPU Basic: 2 vCPU / 16 GB RAM, Streamlit first-class | Fallback frontend if Streamlit Cloud's RAM limit bites. |
+
+### The billing condition that keeps this at ₹0
+
+Verified from Render's outbound-bandwidth documentation (2026-11):
+
+> "If you consume all of your outbound bandwidth during a given month, Render
+> bills you for a supplementary amount. **If you haven't added a payment method,
+> Render instead suspends all of your Free services for the remainder of the
+> month.**"
+
+The *same* overage therefore produces either a bill or an outage, decided solely
+by whether a card is on file. **Do not attach a payment method to Render.** That
+single fact is the whole ₹0 guarantee: with no card there is no mechanism by which
+this deployment can charge anyone, and the worst outcome of any quota is a paused
+service until the next month.
+
+Neon and Streamlit Cloud have no billing path at all on their free plans. Neon
+states it plainly: *"Neon does not bill overages on the Free plan"* — exceeding
+CU-hours or transfer suspends compute instead, and no limit deletes data.
+
+### Documented service limitations
+
+Stated here rather than discovered later:
+
+| Limitation | Effect | Why it is accepted |
+|---|---|---|
+| Render spins down after 15 min idle | First request after idling takes up to ~60 s | The alternative is an uptime pinger, which keeps 750 instance-hours/month permanently consumed (~744 h in a month) and defeats the purpose of a free tier. **No pinger is used.** |
+| Render may restart a Free service at any time | In-flight background audit writes may be lost | Persistence is explicitly best-effort; predictions are returned before the write |
+| Render may suspend services generating "uncommonly high" service-initiated traffic — **accessing an external database is a named example** | A burst of database traffic could pause the API | Low demo traffic; the write path is small and background. This is a real, documented risk, not a hypothetical. |
+| Render Free is "not for production" and terminable at any time | The demo may disappear | It is a portfolio showcase, not an SLA |
+| Neon suspends compute after 5 min idle, cannot be disabled | ~0.5 s wake on the first query | Invisible: database writes happen after the response |
+| Streamlit hibernates after 12 h with no traffic | A visitor must click to wake the app | Platform behaviour; no pinger used for the same reason as above |
 
 ### Architecture this implies
 
 ```
 GitHub (public repo)
-│   ├── artifacts/model_calibrated/   ← committed (1.4 MB, versioned)
+│   ├── artifacts/model_calibrated/   ← committed (6.7 MB, versioned)
 │   └── training code, configs, tests
 │
 ├─► Render Free Web Service ── FastAPI (1 worker, model baked into image)
@@ -872,7 +904,6 @@ Two workers would exceed the limit.
 | **MLflow server** | Needs persistent storage + RAM | Local MLflow only; the registry is not part of the public deployment |
 | **Render Postgres** | Expires after 30 days | **Neon** — now wired for prediction persistence (Phase 9) |
 | **DVC remote** | Needs an object store | Local DVC; data is reproducible from the pinned SHA-256 |
-| **Render Postgres** | Expires after 30 days | Neon |
 
 Training is intentionally **separate from inference**. The deployed service only
 loads a committed artifact and serves it; it never trains, tunes or reads DVC.
@@ -880,7 +911,7 @@ Retraining writes a new artifact and redeploys.
 
 ### Why the model artifact is committed to Git
 
-`artifacts/model_calibrated/` (**1.4 MB**) is version-controlled, which is unusual
+`artifacts/model_calibrated/` (**6.7 MB** uncompressed) is version-controlled, which is unusual
 for an ML repo. It is deliberate here: the free tier offers **no persistent disk**
 and no object store (S3 was excluded by budget), so the only way the service can
 have the model is to carry it in the image. The build copies it in at image-build

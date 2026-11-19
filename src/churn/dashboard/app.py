@@ -26,7 +26,52 @@ import pandas as pd
 import requests
 import streamlit as st
 
-API_URL = os.environ.get("CHURN_API_URL", "http://localhost:8000").rstrip("/")
+
+# --------------------------------------------------------------------------- #
+# Configuration
+# --------------------------------------------------------------------------- #
+def resolve_api_url() -> str:
+    """Find the API base URL, preferring Streamlit secrets over the environment.
+
+    Community Cloud does **not** inject environment variables; it exposes
+    configuration through ``st.secrets``. Reading only ``os.environ`` would make
+    the deployed app silently fall back to ``http://localhost:8000`` — a code path
+    that cannot possibly work from a browser in someone else's data centre, and
+    one that fails with a confusing "Cannot reach the API" banner rather than a
+    configuration error.
+
+    Precedence, highest first:
+
+    1. ``st.secrets["CHURN_API_URL"]`` — how a deployment is configured.
+    2. ``st.secrets["api"]["url"]`` — the nested form, which reads more naturally
+       in ``secrets.toml``.
+    3. ``CHURN_API_URL`` environment variable — how Docker Compose and local
+       development are configured.
+
+    Reading secrets is wrapped in a broad ``except`` on purpose: ``st.secrets``
+    raises ``FileNotFoundError`` when no ``secrets.toml`` exists (the normal
+    local case) and ``KeyError`` for a missing key. Neither is an error worth
+    showing a user, and neither should stop the app from starting.
+    """
+    for getter in (
+        lambda: st.secrets["CHURN_API_URL"],
+        lambda: st.secrets["api"]["url"],
+    ):
+        try:
+            value = str(getter()).strip()
+        except Exception:  # noqa: BLE001 - absent secrets are expected locally
+            continue
+        if value:
+            return value.rstrip("/")
+
+    return os.environ.get("CHURN_API_URL", "http://localhost:8000").rstrip("/")
+
+
+API_URL = resolve_api_url()
+#: Shown in the sidebar so a misconfigured deployment is obvious at a glance
+#: instead of surfacing as a mysterious timeout.
+_DEFAULT_API_URL = os.environ.get("CHURN_API_URL", "http://localhost:8000").rstrip("/")
+API_URL_SOURCE = "environment" if API_URL == _DEFAULT_API_URL else "st.secrets"
 
 #: Render free instances need up to ~60 s to wake from a cold start.
 COLD_START_TIMEOUT = 75
@@ -109,7 +154,12 @@ def render_sidebar() -> dict[str, Any] | None:
     )
     with st.sidebar.expander("API"):
         st.code(API_URL, language="text")
+        st.caption(f"Configured via **{API_URL_SOURCE}**.")
         st.caption("This dashboard calls the API over HTTP and never loads the model.")
+        st.caption(
+            "The first request after the API has been idle can take up to a minute "
+            "while the free instance wakes."
+        )
     st.sidebar.divider()
     st.sidebar.caption(
         "⚠️ Explanations describe model behaviour, not causation. "

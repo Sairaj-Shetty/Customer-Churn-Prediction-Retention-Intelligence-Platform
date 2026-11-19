@@ -29,12 +29,22 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from churn.api import explainability, meta, prediction, readiness, rejections
 from churn.api.inference import ServingBundle
+from churn.api.limits import BodySizeLimitMiddleware, RateLimiter, enforce_rate_limit
 from churn.api.observability import METRICS
 from churn.config import get_settings
 from churn.db.session import dispose_engine
 from churn.logging_utils import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+#: Paths that are exempt from rate limiting. Probes are called by the platform
+#: every few seconds and must never be throttled — throttling /health would make
+#: Render consider the service unhealthy and restart it.
+RATE_LIMIT_EXEMPT_PATHS = frozenset({"/health", "/ready"})
+
+#: Paths that consume the tighter *explanation* budget. A SHAP explanation is
+#: ~10x the CPU of a prediction, and the free tier has 0.1 CPU to share.
+EXPLAIN_PATHS = frozenset({"/explain", "/explain/batch"})
 
 
 @asynccontextmanager
@@ -77,15 +87,31 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # The Streamlit frontend runs on a different origin, so CORS is required.
-    # Kept permissive because the deployed frontend's origin varies by platform;
-    # there is no auth or user data in this API.
+    # Exposed so the /metrics dependency and tests can read the active settings
+    # without calling the cached global (which tests frequently override).
+    application.state.settings = settings
+
+    # Declared before the middleware stack so the limiter is created once per app
+    # rather than per request, and so tests can reset it.
+    application.state.prediction_limiter = RateLimiter(
+        capacity=settings.api.rate_limit_requests,
+        window_seconds=settings.api.rate_limit_window_seconds,
+    )
+    application.state.explain_limiter = RateLimiter(
+        capacity=settings.api.explain_rate_limit_requests,
+        window_seconds=settings.api.rate_limit_window_seconds,
+    )
+
+    # Body cap is added *last* so it runs *outermost*: an oversized body is
+    # rejected before CORS, timing or validation touches it.
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.api.cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
+        # Retry-After must be readable by the browser so a client can back off.
+        expose_headers=["Retry-After"],
     )
 
     @application.middleware("http")
@@ -112,6 +138,43 @@ def create_app() -> FastAPI:
     # never reaches scoring is still visible to drift monitoring. Never changes
     # the 422 response body.
     rejections.install(application)
+
+    @application.middleware("http")
+    async def rate_limit(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Throttle per client before any expensive work happens.
+
+        Placed after (inside) the body-size cap and before the routers, so a
+        client that is over budget never reaches SHAP or the model at all.
+
+        ``/health`` and ``/ready`` are exempt: the platform polls them and
+        throttling them would look like an outage.
+        """
+        path = request.url.path
+        if request.method == "OPTIONS" or path in RATE_LIMIT_EXEMPT_PATHS:
+            return await call_next(request)
+
+        is_explain = path in EXPLAIN_PATHS
+        limiter: RateLimiter = (
+            application.state.explain_limiter
+            if is_explain
+            else application.state.prediction_limiter
+        )
+        # Returns a response rather than raising: see enforce_rate_limit's docstring.
+        rejection = enforce_rate_limit(
+            request,
+            limiter=limiter,
+            trusted_proxy_count=application.state.settings.api.trusted_proxy_count,
+            rule="explain" if is_explain else "requests",
+        )
+        if rejection is not None:
+            return rejection
+        return await call_next(request)
+
+    # Outermost: rejects an oversized body before it is buffered, parsed or
+    # counted against a rate limit.
+    application.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.api.max_body_bytes)
 
     application.include_router(prediction.router)
     application.include_router(explainability.router)

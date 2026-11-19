@@ -19,10 +19,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from churn.api.inference import ServingBundle
+from churn.api.limits import require_token
 from churn.api.observability import METRICS
 from churn.api.prediction import get_bundle
 from churn.config import PROJECT_ROOT
@@ -45,13 +46,29 @@ CALIBRATION_REPORT_PATH = PROJECT_ROOT / "reports" / "phase4_calibration.json"
     "/metrics",
     summary="Operational metrics (service health, NOT model quality)",
     response_model=None,
+    dependencies=[Depends(require_token)],
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        404: {"description": "Metrics are not enabled on this deployment"},
+    },
 )
 def metrics(request: Request) -> dict[str, Any]:
-    """In-process operational counters.
+    """In-process operational counters, behind a bearer token.
+
+    Why authenticated
+    -----------------
+    Failure rates, latency distributions, the database dialect and whether
+    persistence is enabled are all **operational intelligence**. Publishing them
+    unauthenticated on a public demo is the "no unauthenticated monitoring
+    interface" failure mode: it tells a scanner exactly how the service is
+    configured and when it is struggling.
+
+    The token is compared in constant time (``hmac.compare_digest``). When no
+    token is configured the endpoint returns **404**, not 403, so an
+    unconfigured deployment does not even confirm that the endpoint exists.
 
     Scope and caveats are returned in the payload rather than left to
-    documentation, because this endpoint is the one most likely to be scraped by
-    something that does not read the docs.
+    documentation, because whoever *is* authorised to read this may not have.
     """
     bundle: ServingBundle | None = getattr(request.app.state, "bundle", None)
     return METRICS.snapshot(model_loaded=bundle is not None)

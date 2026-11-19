@@ -18,6 +18,13 @@ RUN pip install --upgrade pip && pip install -e ".[api]"
 
 # The calibrated artifact ships inside the image (no persistent disk on free tier)
 COPY artifacts/model_calibrated/ ./artifacts/model_calibrated/
+
+# The frozen drift schema must ship too. Without it `_load_schema` returns None
+# and drift observation is silently skipped, so the service looks like it is
+# collecting production data while recording nothing. Easy to miss because the
+# failure is a no-op, not an error.
+COPY artifacts/monitoring/ ./artifacts/monitoring/
+
 COPY configs/ ./configs/
 
 # Migrations ship too, but are NOT run at container start. The app never creates

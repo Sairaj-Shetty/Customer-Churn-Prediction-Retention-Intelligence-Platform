@@ -1,0 +1,147 @@
+# Local development stack — PostgreSQL + FastAPI + Streamlit.
+#
+# This is a *local* environment: it needs no Render account and no Neon project.
+# Every service talks over the compose network, so nothing is exposed to the
+# internet except the ports you explicitly publish below.
+#
+#   docker compose up --build -d        # start everything
+#   docker compose run --rm migrate     # apply database migrations
+#   docker compose ps                   # health of each service
+#   docker compose logs -f api          # follow the API log
+#   docker compose down                 # stop, keep the database volume
+#   docker compose down -v              # stop and delete the database volume
+#
+# Why `migrate` is a separate service rather than a start-up step in the API:
+# schema changes should be an explicit, visible action. An API that migrates on
+# boot can half-apply a change while several replicas race each other, and a
+# broken migration then takes down serving instead of failing one step.
+
+name: churn-platform
+
+services:
+  # ------------------------------------------------------------------ #
+  # PostgreSQL — the same engine as the production Neon database, so
+  # dialect differences surface locally rather than after deployment.
+  # ------------------------------------------------------------------ #
+  db:
+    image: postgres:16-alpine
+    container_name: churn-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-churn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-churn}
+      POSTGRES_DB: ${POSTGRES_DB:-churn}
+      # Deterministic collation: locale-dependent ordering can otherwise make
+      # ORDER BY results differ between a laptop and the server.
+      LANG: C.UTF-8
+    ports:
+      # Published as 5433 to avoid colliding with a PostgreSQL already installed
+      # on the host (the common case for Windows users who installed it via
+      # the EDB installer). Inside the network the port is still 5432.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Named volume: data survives `docker compose down`. It is removed only by
+      # `down -v`, so an accidental restart never costs your audit history.
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` is the authoritative check: a listening port can exist
+      # before the server accepts connections, so a TCP check alone would let
+      # the API start against a database that is not ready.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-churn} -d ${POSTGRES_DB:-churn}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ------------------------------------------------------------------ #
+  # Migrations — runs to completion, then exits. Not started by `up`.
+  # `docker compose run --rm migrate` is the documented way to apply them.
+  # ------------------------------------------------------------------ #
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    image: churn-platform-migrate:local
+    environment:
+      CHURN_DATABASE__URL: postgresql+psycopg2://${POSTGRES_USER:-churn}:${POSTGRES_PASSWORD:-churn}@db:5432/${POSTGRES_DB:-churn}
+      # No TLS on a private compose bridge network; the local server has no
+      # certificate. Production (Neon) requires `require` and keeps the default.
+      CHURN_DATABASE__SSLMODE: disable
+      CHURN_DATABASE__CONNECT_TIMEOUT: "10"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------ #
+  # FastAPI — the serving backend.
+  # ------------------------------------------------------------------ #
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: churn-platform-api:local
+    container_name: churn-api
+    restart: unless-stopped
+    environment:
+      CHURN_DATABASE__URL: postgresql+psycopg2://${POSTGRES_USER:-churn}:${POSTGRES_PASSWORD:-churn}@db:5432/${POSTGRES_DB:-churn}
+      CHURN_DATABASE__SSLMODE: disable
+      CHURN_DATABASE__PERSIST_PREDICTIONS: "true"
+      CHURN_API__SERVING_MODEL_DIR: artifacts/model_calibrated
+      # Both the published host port and the compose service name, so the
+      # dashboard works whether it is opened as localhost:8501 or from inside
+      # the network.
+      CHURN_API__CORS_ORIGINS: '["http://localhost:8501","http://127.0.0.1:8501"]'
+      # One well-known proxy hop (the published port) — see the security note in
+      # docs/09_LOCAL_SETUP_WINDOWS.md. Left at 0 locally because the client's
+      # socket address is directly observable.
+      CHURN_API__TRUSTED_PROXY_COUNT: "0"
+      CHURN_LOG_LEVEL: INFO
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      # Migrations must have run before the API writes anything. `service_completed_successfully`
+      # makes `up` wait for them instead of racing.
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # /health only — never /ready. See the long note in render.yaml: readiness
+      # depends on the database, and binding the container probe to it makes a
+      # database hiccup look like a broken container.
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200 else 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      # Model load (sklearn + xgboost unpickle) takes a few seconds; give it room
+      # so the first probe does not mark a starting container unhealthy.
+      start_period: 40s
+
+  # ------------------------------------------------------------------ #
+  # Streamlit — the dashboard. Talks to the API over HTTP only.
+  # ------------------------------------------------------------------ #
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: churn-platform-dashboard:local
+    container_name: churn-dashboard
+    restart: unless-stopped
+    environment:
+      # Service name + container port: this is the internal network address, not
+      # the host-published one. Using localhost here is the classic compose bug —
+      # inside the container, localhost is the container itself.
+      CHURN_API_URL: http://api:8000
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+    name: churn-postgres-data

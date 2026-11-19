@@ -85,6 +85,30 @@ class ReadinessResponse(BaseModel):
     )
 
 
+def public_database_info() -> dict[str, Any]:
+    """Database description safe to return from a **public** endpoint.
+
+    ``engine_info()`` includes the redacted DSN, which hides the password but
+    still discloses the host, username and database name. On a publicly reachable
+    service that is unnecessary reconnaissance material — an attacker learns the
+    provider, the account name and the target database from one unauthenticated
+    GET.
+
+    This endpoint is public by design (it is a probe), so it reports only what an
+    operator needs to interpret a *degraded* status: which engine, whether pooling
+    is configured, and the timeouts in force. The DSN remains available to
+    trusted tooling through ``engine_info()`` and the logs, both of which are not
+    publicly addressable.
+    """
+    full = engine_info()
+    return {
+        "dialect": full["dialect"],
+        "pooled": full["pool_size"] is not None,
+        "pool_pre_ping": full["pool_pre_ping"],
+        "connect_timeout_seconds": full["connect_timeout_seconds"],
+    }
+
+
 def _database_check() -> tuple[bool, str | None, bool]:
     """Cached database probe. Returns ``(ok, error, was_cached)``."""
     global _cached
@@ -159,6 +183,6 @@ def ready(request: Request, response: Response) -> ReadinessResponse:
         components=components,
         prediction_available=model_ok,
         persistence={**persistence_status(), "mode": PERSISTENCE_MODE},
-        database={**engine_info(), "reachable": database_ok},
+        database={**public_database_info(), "reachable": database_ok},
         check_cached=was_cached,
     )

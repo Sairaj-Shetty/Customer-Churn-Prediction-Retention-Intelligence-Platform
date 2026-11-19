@@ -112,6 +112,30 @@ class APIConfig(BaseModel):
     #: and has no authentication; narrow it via ``CHURN_API__CORS_ORIGINS``.
     cors_origins: list[str] = ["*"]
 
+    # --- Public-deployment hardening (Phase 11) --------------------------- #
+    #: Hard cap on a request body, in bytes. ``max_batch_size`` bounds the number
+    #: of rows in a batch but not their size; this bounds the bytes on the wire.
+    #: 256 KB comfortably fits a 100-row batch (~40 KB) with room to spare.
+    max_body_bytes: int = 262_144
+    #: Maximum requests allowed per client per ``rate_limit_window_seconds``.
+    rate_limit_requests: int = 120
+    rate_limit_window_seconds: float = 60.0
+    #: Stricter budget for SHAP endpoints: one explanation costs roughly ten
+    #: predictions in CPU time, and the free tier grants 0.1 CPU.
+    explain_rate_limit_requests: int = 30
+    #: Number of reverse proxies in front of the API whose ``X-Forwarded-For``
+    #: entries can be trusted. ``0`` disables the header entirely (correct when
+    #: the socket peer *is* the client). Render puts exactly one proxy in front of
+    #: a web service, so production uses ``1``.
+    #:
+    #: This is a security setting, not a convenience: trusting the header
+    #: unconditionally lets any client forge a new identity per request and
+    #: bypass rate limiting completely.
+    trusted_proxy_count: int = 0
+    #: Bearer token required by ``/metrics``. Empty means the endpoint is hidden
+    #: (404) rather than left public — a deployment must opt in to exposing it.
+    metrics_token: str = ""
+
 
 class DatabaseSettings(BaseModel):
     """Database configuration.
